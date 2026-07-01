@@ -649,8 +649,8 @@ class UIController {
       return;
     }
 
-    // Only timestamp and b1610_mwh — format timestamp as "YYYY-MM-DD HH:MM:SS"
-    const fmtTs = (iso) => iso.replace('T', ' ').replace(/:\d{2}(\.\d+)?(Z)?$/, ':00');
+    // Only timestamp and b1610_mwh — format as "YYYY-MM-DD HH:MM:SS"
+    const fmtTs = (iso) => iso.replace('T', ' ');
     const rows = this._currentB1610
       .slice()
       .sort((a, b) => a[0].localeCompare(b[0]))
