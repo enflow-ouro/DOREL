@@ -649,11 +649,12 @@ class UIController {
       return;
     }
 
-    // Only timestamp and b1610_mwh
+    // Only timestamp and b1610_mwh — format timestamp as "YYYY-MM-DD HH:MM:SS"
+    const fmtTs = (iso) => iso.replace('T', ' ').replace(/:\d{2}(\.\d+)?(Z)?$/, ':00');
     const rows = this._currentB1610
       .slice()
       .sort((a, b) => a[0].localeCompare(b[0]))
-      .map(r => `${r[0]},${r[1]}`);
+      .map(r => `${fmtTs(r[0])},${r[1]}`);
 
     const csv = 'timestamp,b1610_mwh\n' + rows.join('\n');
 
