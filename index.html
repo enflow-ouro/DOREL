@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="DOREL – Interactive dashboard for UK offshore wind farm generation, curtailment and physical notification analytics powered by Elexon data.">
+  <title>DOREL | UK Offshore Wind Analytics Dashboard</title>
+
+  <!-- Google Fonts – Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <!-- Stylesheet -->
+  <link rel="stylesheet" href="index.css">
+</head>
+<body>
+
+  <!-- ====== HEADER ====== -->
+  <header class="header">
+    <div class="header-left">
+      <div class="header-logos">
+        <img src="img/enflow_logo.jpg" alt="EnFlow Consultancy" id="logo-enflow">
+        <span class="logo-separator"></span>
+        <img src="img/uom_logo.png" alt="University of Manchester" id="logo-uom">
+      </div>
+      <div class="header-title-group">
+        <span class="header-title">DOREL</span>
+        <span class="header-subtitle">UK Offshore Wind Analytics</span>
+      </div>
+    </div>
+    <div class="header-right">
+      <button id="btn-theme-toggle" class="btn-theme-toggle" title="Toggle light/dark theme">🌙</button>
+      <a href="https://github.com/enflow-ouro/DOREL" target="_blank" rel="noopener noreferrer">
+        <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8a8 8 0 005.47 7.59c.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.63 7.63 0 014 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+        GitHub
+      </a>
+    </div>
+  </header>
+
+  <!-- ====== MAIN LAYOUT ====== -->
+  <div class="main-layout">
+
+    <!-- ── Sidebar ── -->
+    <aside class="sidebar">
+      <div class="search-wrapper">
+        <span class="search-icon">🔍</span>
+        <input id="farm-search" type="text" class="search-input" placeholder="Search wind farms…" autocomplete="off">
+      </div>
+
+      <ul id="farm-list" class="farm-list">
+        <!-- populated by JS -->
+      </ul>
+
+      <div class="sidebar-section-title">Model Data</div>
+      <div class="future-item">PyWake <span class="badge-soon">Coming soon</span></div>
+      <div class="future-item">WRF <span class="badge-soon">Coming soon</span></div>
+    </aside>
+
+    <!-- ── Content ── -->
+    <main class="content">
+
+      <!-- Controls -->
+      <div class="controls-bar">
+        <div class="date-group">
+          <label for="date-from">From</label>
+          <input id="date-from" type="date">
+        </div>
+        <div class="date-group">
+          <label for="date-to">To</label>
+          <input id="date-to" type="date">
+        </div>
+
+        <div class="controls-sep"></div>
+
+        <!-- Time resolution toggle -->
+        <div class="resolution-group">
+          <button id="res-30min" class="res-btn active" title="30-minute resolution">30 min</button>
+          <button id="res-1h" class="res-btn" title="1-hour resolution">1 hour</button>
+        </div>
+
+        <button id="btn-download" class="btn-download">
+          <svg viewBox="0 0 20 20" fill="currentColor"><path d="M10 13l-4-4h3V3h2v6h3l-4 4z"/><path d="M4 15h12v2H4z"/></svg>
+          Download CSV
+        </button>
+      </div>
+
+      <!-- Chart -->
+      <div class="chart-wrapper">
+        <div id="chart-container"></div>
+        <!-- Curtailment indicator strip -->
+        <div class="curtailment-strip">
+          <span class="curtailment-strip-label">Curtailment</span>
+          <div id="curtailment-indicator"></div>
+        </div>
+        <div id="loading-overlay" class="loading-overlay">
+          <div class="spinner"></div>
+          <span class="loading-text">Loading farm data…</span>
+        </div>
+      </div>
+
+      <!-- Stats -->
+      <div class="stats-row">
+        <div class="stat-card">
+          <div class="stat-label">Total Generation</div>
+          <div class="stat-value" id="stat-generation">—<span class="stat-unit">GWh</span></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Capacity Factor</div>
+          <div class="stat-value" id="stat-cf">—<span class="stat-unit">%</span></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Curtailment Events</div>
+          <div class="stat-value" id="stat-curtailment">—</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Peak Output</div>
+          <div class="stat-value" id="stat-peak">—<span class="stat-unit">MW</span></div>
+        </div>
+      </div>
+
+
+
+    </main>
+  </div>
+
+  <!-- ====== FOOTER ====== -->
+  <footer class="footer">
+    Data source: Elexon Insights API &nbsp;|&nbsp; &copy; EnFlow Ltd &amp; University of Manchester<br>
+    Dashboard for the DOREL project
+  </footer>
+
+  <!-- Error toast -->
+  <div id="error-toast" class="error-toast"></div>
+
+  <!-- Plotly.js -->
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+
+  <!-- App -->
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 180" fill="none">
+  <rect width="500" height="180" rx="4" fill="#440099"/>
+  <text x="250" y="95" text-anchor="middle" font-family="'Times New Roman', Times, serif" font-size="72" font-weight="400" letter-spacing="4">
+    <tspan fill="#FFFFFF">MANCH</tspan><tspan fill="#FFD700">EST</tspan><tspan fill="#FFFFFF">ER</tspan>
+  </text>
+  <text x="250" y="148" text-anchor="middle" font-family="'Times New Roman', Times, serif" font-size="48" font-weight="400" fill="#FFD700" letter-spacing="6">1824</text>
+</svg>

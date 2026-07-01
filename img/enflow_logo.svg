@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 340 110" fill="none">
+  <!-- Flowing wave curves -->
+  <g transform="translate(8, 2)">
+    <!-- Left set: red-coral curves -->
+    <path d="M28 105 C28 80, 8 60, 8 38 C8 18, 22 6, 38 2 C24 10, 14 22, 14 38 C14 60, 32 78, 32 100Z" fill="#6B1515"/>
+    <path d="M20 105 C20 82, 2 63, 2 40 C2 20, 14 7, 30 2 C18 10, 8 24, 8 40 C8 63, 24 80, 24 100Z" fill="#B83226"/>
+    <path d="M12 105 C12 84, -4 66, -4 42 C-4 22, 8 8, 22 2 C10 12, 2 26, 2 42 C2 66, 16 82, 16 100Z" fill="#D4806E"/>
+
+    <!-- Right set: blue curves -->
+    <path d="M36 105 C36 78, 16 58, 16 36 C16 18, 28 6, 44 0 C32 10, 24 22, 24 36 C24 58, 40 76, 40 100Z" fill="#3A7B98"/>
+    <path d="M44 105 C44 76, 24 56, 24 34 C24 16, 36 4, 52 0 C40 10, 32 22, 32 34 C32 56, 48 74, 48 98Z" fill="#6AACCC"/>
+
+    <!-- Bottom connectors -->
+    <path d="M12 102 C18 108, 28 108, 36 102" stroke="#B83226" stroke-width="3.5" fill="none" stroke-linecap="round"/>
+    <path d="M36 100 C40 106, 46 106, 52 100" stroke="#6AACCC" stroke-width="3.5" fill="none" stroke-linecap="round"/>
+  </g>
+
+  <!-- EnFlow text -->
+  <text x="72" y="58" font-family="'Segoe UI', 'Helvetica Neue', Arial, sans-serif" font-weight="800" font-size="44" fill="#2D4A3E" letter-spacing="-0.5">EnFlow</text>
+
+  <!-- Copyright symbol -->
+  <text x="298" y="32" font-family="'Segoe UI', Arial, sans-serif" font-weight="400" font-size="14" fill="#7A9B8E">©</text>
+
+  <!-- consultancy text -->
+  <text x="72" y="84" font-family="'Segoe UI', 'Helvetica Neue', Arial, sans-serif" font-weight="400" font-size="24" fill="#2D4A3E" letter-spacing="3">consultancy</text>
+</svg>
