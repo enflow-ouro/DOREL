@@ -23,6 +23,9 @@
   --accent-amber:   #ffb830;
   --accent-red:     #ff4466;
   --accent-green:   #00e676;
+  --accent-pywake:  #76ff03;
+  --accent-wrf-f:   #ff9100;
+  --accent-wrf-g:   #e040fb;
 
   --text-primary:   #e8ecf4;
   --text-secondary: #8a92b2;
@@ -67,6 +70,9 @@
   --accent-amber:   #d49000;
   --accent-red:     #d32f4f;
   --accent-green:   #00944a;
+  --accent-pywake:  #558b2f;
+  --accent-wrf-f:   #e65100;
+  --accent-wrf-g:   #9c27b0;
 
   --text-primary:   #1a1e2e;
   --text-secondary: #5a6278;
@@ -894,3 +900,67 @@ input[type="date"]:focus {
   .toggle-group { flex-direction: column; align-items: flex-start; gap: 8px; }
   .header-logos .logo-separator { display: none; }
 }
+
+/* ---------- Model Controls ---------- */
+.model-controls {
+  border-top: 1px solid var(--border-subtle);
+  padding-top: 10px;
+  margin-top: -4px;
+  gap: 12px;
+}
+
+.model-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.model-toggle {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.model-select {
+  background: var(--bg-input);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 0.78rem;
+  padding: 5px 8px;
+  cursor: pointer;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  color-scheme: var(--color-scheme);
+}
+.model-select:focus {
+  outline: none;
+  border-color: var(--accent-cyan);
+  box-shadow: 0 0 0 2px rgba(0, 212, 255, 0.15);
+}
+
+/* Sidebar model indicators */
+.model-indicators {
+  padding: 0 16px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.model-ind-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+}
+
+.model-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.model-dot.pywake { background: var(--accent-pywake); }
+.model-dot.wrf-fitch { background: var(--accent-wrf-f); }
+.model-dot.wrf-ghost { background: var(--accent-wrf-g); }
+.model-dot.none { background: var(--text-muted); opacity: 0.4; }

@@ -53,8 +53,9 @@
       </ul>
 
       <div class="sidebar-section-title">Model Data</div>
-      <div class="future-item">PyWake <span class="badge-soon">Coming soon</span></div>
-      <div class="future-item">WRF <span class="badge-soon">Coming soon</span></div>
+      <div id="model-indicators" class="model-indicators">
+        <!-- populated by JS based on farm data -->
+      </div>
     </aside>
 
     <!-- ── Content ── -->
@@ -83,6 +84,36 @@
           <svg viewBox="0 0 20 20" fill="currentColor"><path d="M10 13l-4-4h3V3h2v6h3l-4 4z"/><path d="M4 15h12v2H4z"/></svg>
           Download CSV
         </button>
+      </div>
+
+      <!-- Model controls row (shown when model data available) -->
+      <div id="model-controls" class="controls-bar model-controls" style="display:none;">
+        <div class="model-group">
+          <label class="toggle-label model-toggle">
+            <input id="toggle-pywake" type="checkbox"> PyWake
+          </label>
+          <select id="sel-pywake-scenario" class="model-select" title="PyWake scenario">
+            <option value="standalone">Standalone</option>
+            <option value="cluster">Cluster</option>
+          </select>
+          <select id="sel-pywake-model" class="model-select" title="Wake model">
+            <!-- populated by JS -->
+          </select>
+        </div>
+
+        <div class="controls-sep"></div>
+
+        <div class="model-group">
+          <label class="toggle-label model-toggle">
+            <input id="toggle-wrf-fitch" type="checkbox"> WRF Fitch
+          </label>
+        </div>
+
+        <div class="model-group">
+          <label class="toggle-label model-toggle">
+            <input id="toggle-wrf-ghost" type="checkbox"> WRF Ghost
+          </label>
+        </div>
       </div>
 
       <!-- Chart -->

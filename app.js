@@ -87,6 +87,40 @@ class DataManager {
     }
     return this._cache[farmId].boalf;
   }
+
+  /* ---- PyWake data ---- */
+  async loadPyWake(farmId, scenario) {
+    const key = `pywake_${scenario}`;
+    if (!this._cache[farmId]) this._cache[farmId] = { b1610: {}, pn: {}, boalf: null };
+    if (this._cache[farmId][key]) return this._cache[farmId][key];
+
+    try {
+      const res = await fetch(`${DATA_BASE}/${farmId}/pywake_${scenario}_2023.json`);
+      if (!res.ok) throw new Error();
+      const json = await res.json();
+      this._cache[farmId][key] = json; // { models: [...], data: [[ts, v1, v2, ...], ...] }
+    } catch {
+      this._cache[farmId][key] = { models: [], data: [] };
+    }
+    return this._cache[farmId][key];
+  }
+
+  /* ---- WRF data ---- */
+  async loadWRF(farmId, variant) {
+    const key = `wrf_${variant}`;
+    if (!this._cache[farmId]) this._cache[farmId] = { b1610: {}, pn: {}, boalf: null };
+    if (this._cache[farmId][key]) return this._cache[farmId][key];
+
+    try {
+      const res = await fetch(`${DATA_BASE}/${farmId}/wrf_${variant}_2023.json`);
+      if (!res.ok) throw new Error();
+      const json = await res.json();
+      this._cache[farmId][key] = json.data || []; // [[ts, mw], ...]
+    } catch {
+      this._cache[farmId][key] = [];
+    }
+    return this._cache[farmId][key];
+  }
 }
 
 // ─────────────────────────────────────────────
@@ -146,18 +180,22 @@ class ChartManager {
       cyan:   s.getPropertyValue('--accent-cyan').trim(),
       amber:  s.getPropertyValue('--accent-amber').trim(),
       red:    s.getPropertyValue('--accent-red').trim(),
+      pywake: s.getPropertyValue('--accent-pywake').trim(),
+      wrfF:   s.getPropertyValue('--accent-wrf-f').trim(),
+      wrfG:   s.getPropertyValue('--accent-wrf-g').trim(),
     };
   }
 
   /**
-   * @param {Array} b1610  [[ts, mwh], …]
+   * @param {Array} b1610  [[ts, mwh], ...]
    * @param {Object} farm  farm info object
-   * @param {Object} opts  { showB1610, resolution }
+   * @param {Object} opts  { resolution }
    * @param {Array} boalf  BOALF events array
    * @param {Date} startDate
    * @param {Date} endDate
+   * @param {Object} modelData  { pywake: {models, data, modelIndex}, wrfFitch: [[ts,mw],...], wrfGhost: [[ts,mw],...], showPyWake, showWrfFitch, showWrfGhost }
    */
-  renderChart(b1610, farm, opts, boalf, startDate, endDate) {
+  renderChart(b1610, farm, opts, boalf, startDate, endDate, modelData) {
     const tc = this._getThemeColors();
 
     // Apply time resolution
@@ -204,6 +242,48 @@ class ChartManager {
         name: `Capacity (${farm.capacity_mw} MW)`,
         line: { color: this._hexToRgba(tc.font, 0.3), width: 1, dash: 'dot' },
         showlegend: true
+      });
+    }
+
+    // ── Model traces ──
+    const md = modelData || {};
+    const inRange = (ts) => { const d = new Date(ts); return d >= startDate && d <= endDate; };
+
+    // PyWake
+    if (md.showPyWake && md.pywake && md.pywake.data.length > 0) {
+      const mi = md.pywakeModelIndex || 0;
+      const modelName = md.pywake.models[mi] || 'PyWake';
+      const filtered = md.pywake.data.filter(r => inRange(r[0]));
+      traces.push({
+        x: filtered.map(r => r[0]),
+        y: filtered.map(r => r[1 + mi]),  // data[0]=ts, data[1..]=model values
+        type: 'scatter', mode: 'lines',
+        name: `PyWake ${modelName}`,
+        line: { color: tc.pywake, width: 1.4 },
+      });
+    }
+
+    // WRF Fitch
+    if (md.showWrfFitch && md.wrfFitch && md.wrfFitch.length > 0) {
+      const filtered = md.wrfFitch.filter(r => inRange(r[0]));
+      traces.push({
+        x: filtered.map(r => r[0]),
+        y: filtered.map(r => r[1]),
+        type: 'scatter', mode: 'lines',
+        name: 'WRF Fitch',
+        line: { color: tc.wrfF, width: 1.4 },
+      });
+    }
+
+    // WRF Ghost
+    if (md.showWrfGhost && md.wrfGhost && md.wrfGhost.length > 0) {
+      const filtered = md.wrfGhost.filter(r => inRange(r[0]));
+      traces.push({
+        x: filtered.map(r => r[0]),
+        y: filtered.map(r => r[1]),
+        type: 'scatter', mode: 'lines',
+        name: 'WRF Ghost',
+        line: { color: tc.wrfG, width: 1.4 },
       });
     }
 
@@ -411,6 +491,10 @@ class UIController {
     this._resolution = '30min'; // '30min' or '1h'
     this._startDate = null;
     this._endDate = null;
+    // Model data state
+    this._pywakeData = null;    // { models: [...], data: [...] }
+    this._wrfFitchData = null;  // [[ts, mw], ...]
+    this._wrfGhostData = null;  // [[ts, mw], ...]
   }
 
   /* ---- Bootstrap ---- */
@@ -485,6 +569,16 @@ class UIController {
 
     // Theme toggle
     document.getElementById('btn-theme-toggle').addEventListener('click', () => this._toggleTheme());
+
+    // Model toggles
+    document.getElementById('toggle-pywake').addEventListener('change', () => this._reRender());
+    document.getElementById('toggle-wrf-fitch').addEventListener('change', () => this._reRender());
+    document.getElementById('toggle-wrf-ghost').addEventListener('change', () => this._reRender());
+
+    // PyWake scenario change
+    document.getElementById('sel-pywake-scenario').addEventListener('change', () => this._onPyWakeScenarioChanged());
+    // PyWake model change
+    document.getElementById('sel-pywake-model').addEventListener('change', () => this._reRender());
   }
 
   /* ---- Time resolution ---- */
@@ -495,11 +589,7 @@ class UIController {
     document.getElementById('res-1h').classList.toggle('active', res === '1h');
     // Re-render with current data
     if (this._currentFarm && this._currentB1610.length) {
-      const opts = this._getToggleOpts();
-      this.chart.renderChart(
-        this._currentB1610, this._currentFarm, opts,
-        this._currentBoalf, this._startDate, this._endDate
-      );
+      this._reRender();
     }
   }
 
@@ -530,6 +620,9 @@ class UIController {
     const farm = this.data.farms.find(f => f.id === farmId);
     this._currentFarm = farm;
 
+    // Update model controls for this farm
+    this._updateModelControls(farm);
+
     // Determine date range from available years
     const maxYear = Math.max(...farm.years);
 
@@ -558,6 +651,7 @@ class UIController {
   /* ---- Load & render (core) ---- */
   async _loadAndRender(farm, startDate, endDate) {
     try {
+      // Base data
       const [result, boalf] = await Promise.all([
         this.data.loadFarmData(farm.id, startDate, endDate),
         this.data.loadBoalf(farm.id)
@@ -568,8 +662,41 @@ class UIController {
       this._startDate = startDate;
       this._endDate = endDate;
 
+      // Load model data in parallel
+      const modelFetches = [];
+
+      // PyWake
+      if (farm.pywake) {
+        const scenario = document.getElementById('sel-pywake-scenario').value || 'standalone';
+        modelFetches.push(
+          this.data.loadPyWake(farm.id, scenario).then(d => { this._pywakeData = d; })
+        );
+      } else {
+        this._pywakeData = null;
+      }
+
+      // WRF Fitch
+      if (farm.wrf && farm.wrf.variants.includes('fitch')) {
+        modelFetches.push(
+          this.data.loadWRF(farm.id, 'fitch').then(d => { this._wrfFitchData = d; })
+        );
+      } else {
+        this._wrfFitchData = null;
+      }
+
+      // WRF Ghost
+      if (farm.wrf && farm.wrf.variants.includes('ghost')) {
+        modelFetches.push(
+          this.data.loadWRF(farm.id, 'ghost').then(d => { this._wrfGhostData = d; })
+        );
+      } else {
+        this._wrfGhostData = null;
+      }
+
+      await Promise.all(modelFetches);
+
       const opts = this._getToggleOpts();
-      this.chart.renderChart(result.b1610, farm, opts, boalf, startDate, endDate);
+      this.chart.renderChart(result.b1610, farm, opts, boalf, startDate, endDate, this._buildModelData());
       this.updateStats(result.b1610, farm, startDate, endDate);
     } catch (err) {
       this._showError('Error loading data for ' + farm.name.replace(/_/g, ' '));
@@ -577,6 +704,115 @@ class UIController {
     } finally {
       this.hideLoading();
     }
+  }
+
+  /* ---- Re-render chart with current data (model toggle / option changed) ---- */
+  _reRender() {
+    if (!this._currentFarm || !this._currentB1610.length) return;
+    const opts = this._getToggleOpts();
+    this.chart.renderChart(
+      this._currentB1610, this._currentFarm, opts,
+      this._currentBoalf, this._startDate, this._endDate,
+      this._buildModelData()
+    );
+  }
+
+  /* ---- Build model data object for ChartManager ---- */
+  _buildModelData() {
+    const modelSelect = document.getElementById('sel-pywake-model');
+    return {
+      showPyWake:   document.getElementById('toggle-pywake').checked,
+      showWrfFitch: document.getElementById('toggle-wrf-fitch').checked,
+      showWrfGhost: document.getElementById('toggle-wrf-ghost').checked,
+      pywake:       this._pywakeData,
+      pywakeModelIndex: modelSelect ? parseInt(modelSelect.value) || 0 : 0,
+      wrfFitch:     this._wrfFitchData,
+      wrfGhost:     this._wrfGhostData,
+    };
+  }
+
+  /* ---- PyWake scenario changed — reload data ---- */
+  async _onPyWakeScenarioChanged() {
+    if (!this._currentFarm || !this._currentFarm.pywake) return;
+    const scenario = document.getElementById('sel-pywake-scenario').value;
+    this._pywakeData = await this.data.loadPyWake(this._currentFarm.id, scenario);
+    this._reRender();
+  }
+
+  /* ---- Update model controls for selected farm ---- */
+  _updateModelControls(farm) {
+    const controlsEl = document.getElementById('model-controls');
+    const indicatorsEl = document.getElementById('model-indicators');
+    const hasPW = !!farm.pywake;
+    const hasWRF = !!farm.wrf;
+    const hasAny = hasPW || hasWRF;
+
+    // Show/hide model controls bar
+    controlsEl.style.display = hasAny ? '' : 'none';
+
+    // PyWake controls
+    const pwToggle = document.getElementById('toggle-pywake');
+    const pwScenario = document.getElementById('sel-pywake-scenario');
+    const pwModel = document.getElementById('sel-pywake-model');
+
+    pwToggle.disabled = !hasPW;
+    pwScenario.disabled = !hasPW;
+    pwModel.disabled = !hasPW;
+
+    if (!hasPW) {
+      pwToggle.checked = false;
+    }
+
+    // Populate scenario dropdown
+    if (hasPW) {
+      pwScenario.innerHTML = '';
+      for (const s of farm.pywake.scenarios) {
+        const opt = document.createElement('option');
+        opt.value = s;
+        opt.textContent = s.charAt(0).toUpperCase() + s.slice(1);
+        pwScenario.appendChild(opt);
+      }
+
+      // Populate model dropdown
+      pwModel.innerHTML = '';
+      const models = farm.pywake.models || [];
+      models.forEach((m, i) => {
+        const opt = document.createElement('option');
+        opt.value = i;
+        opt.textContent = m;
+        // Default to ASO
+        if (m === 'ASO') opt.selected = true;
+        pwModel.appendChild(opt);
+      });
+    }
+
+    // WRF toggles
+    const wrfFitchToggle = document.getElementById('toggle-wrf-fitch');
+    const wrfGhostToggle = document.getElementById('toggle-wrf-ghost');
+
+    const hasFitch = hasWRF && farm.wrf.variants.includes('fitch');
+    const hasGhost = hasWRF && farm.wrf.variants.includes('ghost');
+
+    wrfFitchToggle.disabled = !hasFitch;
+    wrfGhostToggle.disabled = !hasGhost;
+    if (!hasFitch) wrfFitchToggle.checked = false;
+    if (!hasGhost) wrfGhostToggle.checked = false;
+
+    // Update sidebar indicators
+    let indHtml = '';
+    if (hasPW) {
+      indHtml += '<div class="model-ind-row"><span class="model-dot pywake"></span>PyWake (2023)</div>';
+    }
+    if (hasFitch) {
+      indHtml += '<div class="model-ind-row"><span class="model-dot wrf-fitch"></span>WRF Fitch (2023)</div>';
+    }
+    if (hasGhost) {
+      indHtml += '<div class="model-ind-row"><span class="model-dot wrf-ghost"></span>WRF Ghost (2023)</div>';
+    }
+    if (!hasAny) {
+      indHtml = '<div class="model-ind-row"><span class="model-dot none"></span>No model data</div>';
+    }
+    indicatorsEl.innerHTML = indHtml;
   }
 
   /* ---- Toggle changed ---- */
