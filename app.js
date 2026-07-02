@@ -579,9 +579,14 @@ class UIController {
       });
     });
 
-    // Date range
-    document.getElementById('date-from').addEventListener('change', () => this.onDateRangeChanged());
-    document.getElementById('date-to').addEventListener('change', () => this.onDateRangeChanged());
+    // Date range (debounced – browsers fire 'change' on each segment edit)
+    this._dateDebounceTimer = null;
+    const debouncedDateChange = () => {
+      clearTimeout(this._dateDebounceTimer);
+      this._dateDebounceTimer = setTimeout(() => this.onDateRangeChanged(), 800);
+    };
+    document.getElementById('date-from').addEventListener('change', debouncedDateChange);
+    document.getElementById('date-to').addEventListener('change', debouncedDateChange);
 
     // Download
     document.getElementById('btn-download').addEventListener('click', () => this.downloadCSV());
@@ -650,14 +655,9 @@ class UIController {
     // Update model controls for this farm
     this._updateModelControls(farm);
 
-    // Determine date range from available years
-    const maxYear = Math.max(...farm.years);
-
-    // Default: end = Dec 31 of max year (or today if current year), start = end - 30d
-    const now = new Date();
-    let endDate = (maxYear >= now.getFullYear()) ? now : new Date(maxYear, 11, 31, 23, 59, 59);
-    let startDate = new Date(endDate);
-    startDate.setDate(startDate.getDate() - 30);
+    // Default date range: 1 Jan 2023 – 30 Mar 2023
+    let startDate = new Date(2023, 0, 1);   // Jan 1
+    let endDate   = new Date(2023, 2, 30, 23, 59, 59); // Mar 30
 
     document.getElementById('date-from').value = this._toDateStr(startDate);
     document.getElementById('date-to').value   = this._toDateStr(endDate);
