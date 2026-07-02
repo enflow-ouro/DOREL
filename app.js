@@ -29,7 +29,7 @@ class DataManager {
     const farm = this.farms.find(f => f.id === farmId);
     if (!farm) throw new Error(`Farm "${farmId}" not found`);
 
-    if (!this._cache[farmId]) this._cache[farmId] = { b1610: {}, pn: {}, boalf: null };
+    if (!this._cache[farmId]) this._cache[farmId] = { b1610: {}, pn: {}, mels: {}, boalf: null };
 
     const startYear = startDate.getFullYear();
     const endYear   = endDate.getFullYear();
@@ -54,12 +54,21 @@ class DataManager {
             .catch(() => { this._cache[farmId].pn[y] = []; })
         );
       }
+      if (!this._cache[farmId].mels[y]) {
+        fetches.push(
+          fetch(`${DATA_BASE}/${farmId}/mels_${y}.json`)
+            .then(r => { if (!r.ok) throw new Error(`mels_${y}`); return r.json(); })
+            .then(j => { this._cache[farmId].mels[y] = j.data; })
+            .catch(() => { this._cache[farmId].mels[y] = []; })
+        );
+      }
     }
     await Promise.all(fetches);
 
     // Merge & filter
     const b1610All = neededYears.flatMap(y => this._cache[farmId].b1610[y] || []);
     const pnAll    = neededYears.flatMap(y => this._cache[farmId].pn[y] || []);
+    const melsAll  = neededYears.flatMap(y => this._cache[farmId].mels[y] || []);
 
     const inRange = (ts) => {
       const d = new Date(ts);
@@ -68,13 +77,14 @@ class DataManager {
 
     return {
       b1610: b1610All.filter(r => inRange(r[0])),
-      pn:    pnAll.filter(r => inRange(r[0]))
+      pn:    pnAll.filter(r => inRange(r[0])),
+      mels:  melsAll.filter(r => inRange(r[0]))
     };
   }
 
   /* ---- BOALF ---- */
   async loadBoalf(farmId) {
-    if (!this._cache[farmId]) this._cache[farmId] = { b1610: {}, pn: {}, boalf: null };
+    if (!this._cache[farmId]) this._cache[farmId] = { b1610: {}, pn: {}, mels: {}, boalf: null };
     if (this._cache[farmId].boalf !== null) return this._cache[farmId].boalf;
 
     try {
@@ -191,11 +201,12 @@ class ChartManager {
    * @param {Object} farm  farm info object
    * @param {Object} opts  { resolution }
    * @param {Array} boalf  BOALF events array
+   * @param {Array} mels   [[ts, mw], ...] MELS data
    * @param {Date} startDate
    * @param {Date} endDate
-   * @param {Object} modelData  { pywake: {models, data, modelIndex}, wrfFitch: [[ts,mw],...], wrfGhost: [[ts,mw],...], showPyWake, showWrfFitch, showWrfGhost }
+   * @param {Object} modelData  { pywake, wrfFitch, wrfGhost, show* }
    */
-  renderChart(b1610, farm, opts, boalf, startDate, endDate, modelData) {
+  renderChart(b1610, farm, opts, boalf, mels, startDate, endDate, modelData) {
     const tc = this._getThemeColors();
 
     // Apply time resolution
@@ -230,6 +241,17 @@ class ChartManager {
         type: 'scatter', mode: 'lines',
         name: `TEC (${farm.tec_mw} MW)`,
         line: { color: tc.red, width: 1.5, dash: 'dash' },
+      });
+    }
+
+    // MELS (always visible when data available)
+    if (mels && mels.length > 0) {
+      traces.push({
+        x: mels.map(r => r[0]),
+        y: mels.map(r => r[1]),
+        type: 'scatter', mode: 'lines',
+        name: 'MELS',
+        line: { color: tc.amber, width: 1.2, dash: 'dashdot' },
       });
     }
 
@@ -487,6 +509,7 @@ class UIController {
     this.activeFarmId = null;
     this._currentB1610 = [];
     this._currentBoalf = [];
+    this._currentMels  = [];
     this._currentFarm  = null;
     this._resolution = '30min'; // '30min' or '1h'
     this._startDate = null;
@@ -659,6 +682,7 @@ class UIController {
 
       this._currentB1610 = result.b1610;
       this._currentBoalf = boalf;
+      this._currentMels  = result.mels || [];
       this._startDate = startDate;
       this._endDate = endDate;
 
@@ -696,7 +720,7 @@ class UIController {
       await Promise.all(modelFetches);
 
       const opts = this._getToggleOpts();
-      this.chart.renderChart(result.b1610, farm, opts, boalf, startDate, endDate, this._buildModelData());
+      this.chart.renderChart(result.b1610, farm, opts, boalf, this._currentMels, startDate, endDate, this._buildModelData());
       this.updateStats(result.b1610, farm, startDate, endDate);
     } catch (err) {
       this._showError('Error loading data for ' + farm.name.replace(/_/g, ' '));
@@ -712,7 +736,7 @@ class UIController {
     const opts = this._getToggleOpts();
     this.chart.renderChart(
       this._currentB1610, this._currentFarm, opts,
-      this._currentBoalf, this._startDate, this._endDate,
+      this._currentBoalf, this._currentMels, this._startDate, this._endDate,
       this._buildModelData()
     );
   }

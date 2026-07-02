@@ -199,6 +199,68 @@ def process_pn(farm_id: str, year: int, input_dir: Path, output_dir: Path) -> in
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# MELS processing
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+def process_mels(farm_id: str, year: int, input_dir: Path, output_dir: Path) -> int:
+    """
+    Read ``{farm_id}_MELS_{year}.csv``, aggregate ``levelFrom`` per settlement
+    period (summing across BM units), and write ``mels_{year}.json``.
+
+    Returns the number of aggregated rows written.
+    """
+    src = input_dir / farm_id / f"{farm_id}_MELS_{year}.csv"
+    if not src.exists():
+        return 0
+
+    # Accumulate: (settlementDate, settlementPeriod) -> { "timeFrom": ..., "level_sum": ... }
+    agg: dict[tuple[str, str], dict] = {}
+
+    with open(src, "r", encoding="utf-8", newline="") as fh:
+        reader = csv.reader(fh)
+        header = next(reader)
+        try:
+            sd_idx = header.index("settlementDate")
+            sp_idx = header.index("settlementPeriod")
+            tf_idx = header.index("timeFrom")
+            lf_idx = header.index("levelFrom")
+        except ValueError:
+            print(f"  WARNING: unexpected columns in {src.name}, skipping")
+            return 0
+
+        for row in reader:
+            if len(row) <= max(sd_idx, sp_idx, tf_idx, lf_idx):
+                continue
+            key = (row[sd_idx], row[sp_idx])
+            level = _parse_float(row[lf_idx])
+            entry = agg.get(key)
+            if entry is None:
+                agg[key] = {"timeFrom": row[tf_idx], "level_sum": level}
+            else:
+                entry["level_sum"] += level
+
+    if not agg:
+        return 0
+
+    # Sort by (settlementDate, settlementPeriod as int)
+    sorted_keys = sorted(agg.keys(), key=lambda k: (k[0], int(k[1])))
+    rows = []
+    for key in sorted_keys:
+        entry = agg[key]
+        ts = entry["timeFrom"]
+        # Strip trailing 'Z' if present to match B1610 timestamp style
+        if ts.endswith("Z"):
+            ts = ts[:-1]
+        mw = round(entry["level_sum"], 1)
+        rows.append([ts, mw])
+
+    out = output_dir / farm_id / f"mels_{year}.json"
+    _write_json(out, {"columns": ["timestamp", "mw"], "data": rows})
+    return len(rows)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # BOALF processing
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -300,9 +362,9 @@ def process_farm(
     farm_id: str, input_dir: Path, output_dir: Path
 ) -> dict:
     """Process a single farm and return summary counters."""
-    stats = {"b1610_rows": 0, "pn_rows": 0, "boalf_rows": 0, "b1610_years": 0, "pn_years": 0}
+    stats = {"b1610_rows": 0, "pn_rows": 0, "mels_rows": 0, "boalf_rows": 0, "b1610_years": 0, "pn_years": 0, "mels_years": 0}
 
-    # B1610 — per year
+    # B1610 - per year
     for year in YEARS:
         n = process_b1610(farm_id, year, input_dir, output_dir)
         if n:
@@ -310,7 +372,7 @@ def process_farm(
             stats["b1610_years"] += 1
             print(f"    B1610 {year}: {n:,} rows")
 
-    # PN — per year
+    # PN - per year
     for year in YEARS:
         n = process_pn(farm_id, year, input_dir, output_dir)
         if n:
@@ -318,7 +380,15 @@ def process_farm(
             stats["pn_years"] += 1
             print(f"    PN    {year}: {n:,} rows")
 
-    # BOALF — all years combined
+    # MELS - per year
+    for year in YEARS:
+        n = process_mels(farm_id, year, input_dir, output_dir)
+        if n:
+            stats["mels_rows"] += n
+            stats["mels_years"] += 1
+            print(f"    MELS  {year}: {n:,} rows")
+
+    # BOALF - all years combined
     n = process_boalf(farm_id, input_dir, output_dir)
     if n:
         stats["boalf_rows"] = n
@@ -378,7 +448,7 @@ def main() -> None:
     print()
 
     t0 = time.perf_counter()
-    total = {"farms": 0, "b1610_rows": 0, "pn_rows": 0, "boalf_rows": 0}
+    total = {"farms": 0, "b1610_rows": 0, "pn_rows": 0, "mels_rows": 0, "boalf_rows": 0}
 
     for i, fid in enumerate(farm_ids, 1):
         print(f"[{i}/{len(farm_ids)}] {fid}")
@@ -391,6 +461,7 @@ def main() -> None:
         total["farms"] += 1
         total["b1610_rows"] += stats["b1610_rows"]
         total["pn_rows"] += stats["pn_rows"]
+        total["mels_rows"] += stats["mels_rows"]
         total["boalf_rows"] += stats["boalf_rows"]
 
     # Build the index file
@@ -409,8 +480,9 @@ def main() -> None:
     print(f"  Farms processed   : {total['farms']}")
     print(f"  B1610 records     : {total['b1610_rows']:,}")
     print(f"  PN records        : {total['pn_rows']:,}")
+    print(f"  MELS records      : {total['mels_rows']:,}")
     print(f"  BOALF records     : {total['boalf_rows']:,}")
-    print(f"  Total records     : {total['b1610_rows'] + total['pn_rows'] + total['boalf_rows']:,}")
+    print(f"  Total records     : {total['b1610_rows'] + total['pn_rows'] + total['mels_rows'] + total['boalf_rows']:,}")
     print(f"  Output size       : {out_bytes / 1_048_576:.1f} MB")
     print(f"  Elapsed time      : {elapsed:.1f}s")
     print("=" * 60)
