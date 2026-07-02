@@ -101,15 +101,19 @@ class DataManager {
   /* ---- PyWake data ---- */
   async loadPyWake(farmId, scenario) {
     const key = `pywake_${scenario}`;
-    if (!this._cache[farmId]) this._cache[farmId] = { b1610: {}, pn: {}, boalf: null };
+    if (!this._cache[farmId]) this._cache[farmId] = { b1610: {}, pn: {}, mels: {}, boalf: null };
     if (this._cache[farmId][key]) return this._cache[farmId][key];
 
+    const url = `${DATA_BASE}/${farmId}/pywake_${scenario}_2023.json`;
+    console.log(`[DOREL] Fetching PyWake: ${url}`);
     try {
-      const res = await fetch(`${DATA_BASE}/${farmId}/pywake_${scenario}_2023.json`);
-      if (!res.ok) throw new Error();
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
+      console.log(`[DOREL] PyWake loaded: ${json.models?.length} models, ${json.data?.length} rows`);
       this._cache[farmId][key] = json; // { models: [...], data: [[ts, v1, v2, ...], ...] }
-    } catch {
+    } catch (err) {
+      console.error(`[DOREL] PyWake fetch failed:`, err);
       this._cache[farmId][key] = { models: [], data: [] };
     }
     return this._cache[farmId][key];
@@ -118,15 +122,19 @@ class DataManager {
   /* ---- WRF data ---- */
   async loadWRF(farmId, variant) {
     const key = `wrf_${variant}`;
-    if (!this._cache[farmId]) this._cache[farmId] = { b1610: {}, pn: {}, boalf: null };
+    if (!this._cache[farmId]) this._cache[farmId] = { b1610: {}, pn: {}, mels: {}, boalf: null };
     if (this._cache[farmId][key]) return this._cache[farmId][key];
 
+    const url = `${DATA_BASE}/${farmId}/wrf_${variant}_2023.json`;
+    console.log(`[DOREL] Fetching WRF ${variant}: ${url}`);
     try {
-      const res = await fetch(`${DATA_BASE}/${farmId}/wrf_${variant}_2023.json`);
-      if (!res.ok) throw new Error();
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
+      console.log(`[DOREL] WRF ${variant} loaded: ${json.data?.length} rows`);
       this._cache[farmId][key] = json.data || []; // [[ts, mw], ...]
-    } catch {
+    } catch (err) {
+      console.error(`[DOREL] WRF ${variant} fetch failed:`, err);
       this._cache[farmId][key] = [];
     }
     return this._cache[farmId][key];
@@ -447,39 +455,44 @@ class ChartManager {
     }
   }
 
-  /** Render daily production scatter: Elexon B1610 (x) vs active model (y) */
+  /** Render daily production scatter: Elexon B1610 (x) vs ALL active models (y) */
   _renderDailyScatter(b1610, startDate, endDate, modelData, tc) {
     const container = document.getElementById(this.scatterId);
     const md = modelData || {};
 
-    // Determine which model is active (pick first active: PyWake > WRF Fitch > WRF Ghost)
-    let modelLabel = null;
-    let modelSeries = null; // [{ts, mw}, ...]
-    let modelColor = null;
+    // Build list of active model sources
+    const sources = [];
 
     if (md.showPyWake && md.pywake && md.pywake.data.length > 0) {
       const mi = md.pywakeModelIndex || 0;
-      modelLabel = 'PyWake ' + (md.pywake.models[mi] || '');
-      modelSeries = md.pywake.data.map(r => ({ ts: r[0], mw: r[1 + mi] || 0 }));
-      modelColor = tc.pywake;
-    } else if (md.showWrfFitch && md.wrfFitch && md.wrfFitch.length > 0) {
-      modelLabel = 'WRF Fitch';
-      modelSeries = md.wrfFitch.map(r => ({ ts: r[0], mw: r[1] || 0 }));
-      modelColor = tc.wrfF;
-    } else if (md.showWrfGhost && md.wrfGhost && md.wrfGhost.length > 0) {
-      modelLabel = 'WRF Ghost';
-      modelSeries = md.wrfGhost.map(r => ({ ts: r[0], mw: r[1] || 0 }));
-      modelColor = tc.wrfG;
+      sources.push({
+        label: 'PyWake ' + (md.pywake.models[mi] || ''),
+        series: md.pywake.data.map(r => ({ ts: r[0], mw: r[1 + mi] || 0 })),
+        color: tc.pywake,
+      });
+    }
+    if (md.showWrfFitch && md.wrfFitch && md.wrfFitch.length > 0) {
+      sources.push({
+        label: 'WRF Fitch',
+        series: md.wrfFitch.map(r => ({ ts: r[0], mw: r[1] || 0 })),
+        color: tc.wrfF,
+      });
+    }
+    if (md.showWrfGhost && md.wrfGhost && md.wrfGhost.length > 0) {
+      sources.push({
+        label: 'WRF Ghost',
+        series: md.wrfGhost.map(r => ({ ts: r[0], mw: r[1] || 0 })),
+        color: tc.wrfG,
+      });
     }
 
-    if (!modelSeries || b1610.length === 0) {
+    if (sources.length === 0 || b1610.length === 0) {
       container.style.display = 'none';
       Plotly.purge(this.scatterId);
       return;
     }
     container.style.display = '';
 
-    // Aggregate both to daily MWh
     const inRange = (ts) => { const d = new Date(ts); return d >= startDate && d <= endDate; };
 
     // B1610 daily: data is [ts, mwh] at 30-min => sum per day
@@ -490,66 +503,73 @@ class ChartManager {
       elexonDaily[day] = (elexonDaily[day] || 0) + r[1];
     }
 
-    // Model daily: data is MW at 10-min => MWh = MW * (10/60), sum per day
-    const modelDaily = {};
-    for (const r of modelSeries) {
-      if (!inRange(r.ts)) continue;
-      const day = r.ts.slice(0, 10);
-      modelDaily[day] = (modelDaily[day] || 0) + r.mw * (10 / 60);
+    const traces = [];
+    let globalMax = 0;
+
+    for (const src of sources) {
+      // Model daily: MW at 10-min => MWh = MW * (10/60), sum per day
+      const modelDaily = {};
+      for (const r of src.series) {
+        if (!inRange(r.ts)) continue;
+        const day = r.ts.slice(0, 10);
+        modelDaily[day] = (modelDaily[day] || 0) + r.mw * (10 / 60);
+      }
+
+      const days = Object.keys(elexonDaily).filter(d => d in modelDaily).sort();
+      const xVals = days.map(d => elexonDaily[d] / 1000); // GWh
+      const yVals = days.map(d => modelDaily[d] / 1000);  // GWh
+      const hoverText = days.map((d, i) =>
+        d + '<br>Elexon: ' + xVals[i].toFixed(2) + ' GWh<br>' + src.label + ': ' + yVals[i].toFixed(2) + ' GWh'
+      );
+
+      if (xVals.length > 0) {
+        globalMax = Math.max(globalMax, ...xVals, ...yVals);
+        traces.push({
+          x: xVals, y: yVals,
+          type: 'scatter', mode: 'markers',
+          name: src.label,
+          text: hoverText, hoverinfo: 'text',
+          marker: { color: src.color, size: 6, opacity: 0.7 },
+        });
+      }
     }
 
-    // Build matched pairs (days present in both)
-    const days = Object.keys(elexonDaily).filter(d => d in modelDaily).sort();
-    const xVals = days.map(d => elexonDaily[d] / 1000); // GWh
-    const yVals = days.map(d => modelDaily[d] / 1000);  // GWh
-    const hoverText = days.map((d, i) => d + '<br>Elexon: ' + xVals[i].toFixed(2) + ' GWh<br>' + modelLabel + ': ' + yVals[i].toFixed(2) + ' GWh');
-
-    if (xVals.length === 0) {
+    if (traces.length === 0) {
       container.style.display = 'none';
       Plotly.purge(this.scatterId);
       return;
     }
 
-    // 1:1 line range
-    const allVals = [...xVals, ...yVals];
-    const maxVal = Math.max(...allVals) * 1.05;
-
-    const traces = [
-      { // scatter points
-        x: xVals, y: yVals,
-        type: 'scatter', mode: 'markers',
-        name: 'Daily',
-        text: hoverText, hoverinfo: 'text',
-        marker: { color: modelColor, size: 6, opacity: 0.7 },
-      },
-      { // 1:1 line
-        x: [0, maxVal], y: [0, maxVal],
-        type: 'scatter', mode: 'lines',
-        name: '1:1',
-        line: { color: tc.font, width: 1, dash: 'dot' },
-        hoverinfo: 'skip',
-      }
-    ];
+    // 1:1 reference line
+    const maxVal = globalMax * 1.05;
+    traces.push({
+      x: [0, maxVal], y: [0, maxVal],
+      type: 'scatter', mode: 'lines',
+      name: '1:1',
+      line: { color: tc.font, width: 1, dash: 'dot' },
+      hoverinfo: 'skip', showlegend: true,
+    });
 
     const layout = {
       paper_bgcolor: tc.paper,
       plot_bgcolor: tc.plot,
       font: { family: 'Inter, sans-serif', color: tc.font, size: 11 },
       margin: { t: 36, r: 24, b: 52, l: 62 },
-      title: { text: 'Daily Production: Elexon vs ' + modelLabel, font: { size: 13 } },
+      title: { text: 'Daily Production: Elexon vs Model', font: { size: 13 } },
       xaxis: {
         title: { text: 'Elexon B1610 (GWh/day)', font: { size: 11 } },
         gridcolor: tc.grid, linecolor: tc.line,
         rangemode: 'tozero',
       },
       yaxis: {
-        title: { text: modelLabel + ' (GWh/day)', font: { size: 11 } },
+        title: { text: 'Model (GWh/day)', font: { size: 11 } },
         gridcolor: tc.grid, linecolor: tc.line,
         rangemode: 'tozero',
         scaleanchor: 'x', scaleratio: 1,
       },
       height: 350,
-      showlegend: false,
+      showlegend: true,
+      legend: { x: 0.02, y: 0.98, bgcolor: 'rgba(0,0,0,0)' },
       hovermode: 'closest',
     };
 
@@ -1064,12 +1084,50 @@ class UIController {
   }
 
   /* ---- Model toggle changed (re-render + update KPIs) ---- */
-  _onModelToggleChanged() {
+  async _onModelToggleChanged() {
+    if (!this._currentFarm) return;
+    const farm = this._currentFarm;
+
+    // Ensure model data is loaded when toggled on
+    const pwChecked = document.getElementById('toggle-pywake').checked;
+    const wrfFChecked = document.getElementById('toggle-wrf-fitch').checked;
+    const wrfGChecked = document.getElementById('toggle-wrf-ghost').checked;
+
+    const reloads = [];
+
+    if (pwChecked && farm.pywake && (!this._pywakeData || this._pywakeData.data.length === 0)) {
+      const scenario = document.getElementById('sel-pywake-scenario').value || 'standalone';
+      // Clear stale empty cache so it re-fetches
+      const key = `pywake_${scenario}`;
+      if (this.data._cache[farm.id] && this.data._cache[farm.id][key] && this.data._cache[farm.id][key].data.length === 0) {
+        delete this.data._cache[farm.id][key];
+      }
+      reloads.push(this.data.loadPyWake(farm.id, scenario).then(d => { this._pywakeData = d; }));
+    }
+    if (wrfFChecked && farm.wrf && farm.wrf.variants.includes('fitch') && (!this._wrfFitchData || this._wrfFitchData.length === 0)) {
+      const key = 'wrf_fitch';
+      if (this.data._cache[farm.id] && this.data._cache[farm.id][key] && this.data._cache[farm.id][key].length === 0) {
+        delete this.data._cache[farm.id][key];
+      }
+      reloads.push(this.data.loadWRF(farm.id, 'fitch').then(d => { this._wrfFitchData = d; }));
+    }
+    if (wrfGChecked && farm.wrf && farm.wrf.variants.includes('ghost') && (!this._wrfGhostData || this._wrfGhostData.length === 0)) {
+      const key = 'wrf_ghost';
+      if (this.data._cache[farm.id] && this.data._cache[farm.id][key] && this.data._cache[farm.id][key].length === 0) {
+        delete this.data._cache[farm.id][key];
+      }
+      reloads.push(this.data.loadWRF(farm.id, 'ghost').then(d => { this._wrfGhostData = d; }));
+    }
+
+    if (reloads.length > 0) {
+      await Promise.all(reloads);
+    }
+
     this._reRender();
-    if (this._currentFarm && this._startDate && this._endDate) {
+    if (this._startDate && this._endDate) {
       const msRange = this._endDate - this._startDate;
       const hoursRange = msRange / (1000 * 60 * 60);
-      this._updateModelStats(this._currentFarm, this._startDate, this._endDate, hoursRange);
+      this._updateModelStats(farm, this._startDate, this._endDate, hoursRange);
     }
   }
 
