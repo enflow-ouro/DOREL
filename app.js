@@ -881,12 +881,15 @@ class UIController {
   /* ---- Build model data object for ChartManager ---- */
   _buildModelData() {
     const modelSelect = document.getElementById('sel-pywake-model');
+    const mi = modelSelect ? parseInt(modelSelect.value) || 0 : 0;
+    const pwData = this._pywakeData;
+    console.log(`[DOREL] _buildModelData: showPyWake=${document.getElementById('toggle-pywake').checked}, modelIndex=${mi}, modelDropdownVal="${modelSelect?.value}", pywakeData=${pwData ? pwData.data?.length + ' rows' : 'null'}`);
     return {
       showPyWake:   document.getElementById('toggle-pywake').checked,
       showWrfFitch: document.getElementById('toggle-wrf-fitch').checked,
       showWrfGhost: document.getElementById('toggle-wrf-ghost').checked,
-      pywake:       this._pywakeData,
-      pywakeModelIndex: modelSelect ? parseInt(modelSelect.value) || 0 : 0,
+      pywake:       pwData,
+      pywakeModelIndex: mi,
       wrfFitch:     this._wrfFitchData,
       wrfGhost:     this._wrfGhostData,
     };
@@ -955,6 +958,7 @@ class UIController {
       // Populate model dropdown
       pwModel.innerHTML = '';
       const models = farm.pywake.models || [];
+      console.log(`[DOREL] Populating model dropdown: ${models.length} models:`, models);
       models.forEach((m, i) => {
         const opt = document.createElement('option');
         opt.value = i;
@@ -963,6 +967,7 @@ class UIController {
         if (m === 'ASO') opt.selected = true;
         pwModel.appendChild(opt);
       });
+      console.log(`[DOREL] Model dropdown value after populate: "${pwModel.value}" (${pwModel.options.length} options)`);
     }
 
     // WRF toggles
