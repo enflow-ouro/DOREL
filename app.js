@@ -173,9 +173,10 @@ function aggregateToHourly(data, isMWh) {
 //  ChartManager – Plotly rendering
 // ─────────────────────────────────────────────
 class ChartManager {
-  constructor(chartId, curtailmentId) {
+  constructor(chartId, curtailmentId, scatterId) {
     this.chartId = chartId;
     this.curtailmentId = curtailmentId;
+    this.scatterId = scatterId;
   }
 
   /** Get current theme colors from CSS custom properties */
@@ -347,6 +348,9 @@ class ChartManager {
 
     // Render curtailment strip
     this._renderCurtailmentStrip(boalf, startDate, endDate, b1610X, tc);
+
+    // Render daily scatter comparison
+    this._renderDailyScatter(b1610, startDate, endDate, modelData, tc);
   }
 
   /** Render BOALF curtailment events as red marks in the strip below the chart */
@@ -443,6 +447,115 @@ class ChartManager {
     }
   }
 
+  /** Render daily production scatter: Elexon B1610 (x) vs active model (y) */
+  _renderDailyScatter(b1610, startDate, endDate, modelData, tc) {
+    const container = document.getElementById(this.scatterId);
+    const md = modelData || {};
+
+    // Determine which model is active (pick first active: PyWake > WRF Fitch > WRF Ghost)
+    let modelLabel = null;
+    let modelSeries = null; // [{ts, mw}, ...]
+    let modelColor = null;
+
+    if (md.showPyWake && md.pywake && md.pywake.data.length > 0) {
+      const mi = md.pywakeModelIndex || 0;
+      modelLabel = 'PyWake ' + (md.pywake.models[mi] || '');
+      modelSeries = md.pywake.data.map(r => ({ ts: r[0], mw: r[1 + mi] || 0 }));
+      modelColor = tc.pywake;
+    } else if (md.showWrfFitch && md.wrfFitch && md.wrfFitch.length > 0) {
+      modelLabel = 'WRF Fitch';
+      modelSeries = md.wrfFitch.map(r => ({ ts: r[0], mw: r[1] || 0 }));
+      modelColor = tc.wrfF;
+    } else if (md.showWrfGhost && md.wrfGhost && md.wrfGhost.length > 0) {
+      modelLabel = 'WRF Ghost';
+      modelSeries = md.wrfGhost.map(r => ({ ts: r[0], mw: r[1] || 0 }));
+      modelColor = tc.wrfG;
+    }
+
+    if (!modelSeries || b1610.length === 0) {
+      container.style.display = 'none';
+      Plotly.purge(this.scatterId);
+      return;
+    }
+    container.style.display = '';
+
+    // Aggregate both to daily MWh
+    const inRange = (ts) => { const d = new Date(ts); return d >= startDate && d <= endDate; };
+
+    // B1610 daily: data is [ts, mwh] at 30-min => sum per day
+    const elexonDaily = {};
+    for (const r of b1610) {
+      if (!inRange(r[0])) continue;
+      const day = r[0].slice(0, 10);
+      elexonDaily[day] = (elexonDaily[day] || 0) + r[1];
+    }
+
+    // Model daily: data is MW at 10-min => MWh = MW * (10/60), sum per day
+    const modelDaily = {};
+    for (const r of modelSeries) {
+      if (!inRange(r.ts)) continue;
+      const day = r.ts.slice(0, 10);
+      modelDaily[day] = (modelDaily[day] || 0) + r.mw * (10 / 60);
+    }
+
+    // Build matched pairs (days present in both)
+    const days = Object.keys(elexonDaily).filter(d => d in modelDaily).sort();
+    const xVals = days.map(d => elexonDaily[d] / 1000); // GWh
+    const yVals = days.map(d => modelDaily[d] / 1000);  // GWh
+    const hoverText = days.map((d, i) => d + '<br>Elexon: ' + xVals[i].toFixed(2) + ' GWh<br>' + modelLabel + ': ' + yVals[i].toFixed(2) + ' GWh');
+
+    if (xVals.length === 0) {
+      container.style.display = 'none';
+      Plotly.purge(this.scatterId);
+      return;
+    }
+
+    // 1:1 line range
+    const allVals = [...xVals, ...yVals];
+    const maxVal = Math.max(...allVals) * 1.05;
+
+    const traces = [
+      { // scatter points
+        x: xVals, y: yVals,
+        type: 'scatter', mode: 'markers',
+        name: 'Daily',
+        text: hoverText, hoverinfo: 'text',
+        marker: { color: modelColor, size: 6, opacity: 0.7 },
+      },
+      { // 1:1 line
+        x: [0, maxVal], y: [0, maxVal],
+        type: 'scatter', mode: 'lines',
+        name: '1:1',
+        line: { color: tc.font, width: 1, dash: 'dot' },
+        hoverinfo: 'skip',
+      }
+    ];
+
+    const layout = {
+      paper_bgcolor: tc.paper,
+      plot_bgcolor: tc.plot,
+      font: { family: 'Inter, sans-serif', color: tc.font, size: 11 },
+      margin: { t: 36, r: 24, b: 52, l: 62 },
+      title: { text: 'Daily Production: Elexon vs ' + modelLabel, font: { size: 13 } },
+      xaxis: {
+        title: { text: 'Elexon B1610 (GWh/day)', font: { size: 11 } },
+        gridcolor: tc.grid, linecolor: tc.line,
+        rangemode: 'tozero',
+      },
+      yaxis: {
+        title: { text: modelLabel + ' (GWh/day)', font: { size: 11 } },
+        gridcolor: tc.grid, linecolor: tc.line,
+        rangemode: 'tozero',
+        scaleanchor: 'x', scaleratio: 1,
+      },
+      height: 350,
+      showlegend: false,
+      hovermode: 'closest',
+    };
+
+    Plotly.newPlot(this.scatterId, traces, layout, { responsive: true, displayModeBar: false });
+  }
+
   updateVisibility(opts) {
     const el = document.getElementById(this.chartId);
     if (!el || !el.data) return;
@@ -505,7 +618,7 @@ class ChartManager {
 class UIController {
   constructor() {
     this.data  = new DataManager();
-    this.chart = new ChartManager('chart-container', 'curtailment-indicator');
+    this.chart = new ChartManager('chart-container', 'curtailment-indicator', 'scatter-container');
     this.activeFarmId = null;
     this._currentB1610 = [];
     this._currentBoalf = [];
@@ -763,8 +876,26 @@ class UIController {
   async _onPyWakeScenarioChanged() {
     if (!this._currentFarm || !this._currentFarm.pywake) return;
     const scenario = document.getElementById('sel-pywake-scenario').value;
+    // Clear cache for old scenario so it re-fetches
+    const cacheKey = `pywake_${scenario}`;
+    if (this.data._cache[this._currentFarm.id]) {
+      delete this.data._cache[this._currentFarm.id][cacheKey];
+    }
     this._pywakeData = await this.data.loadPyWake(this._currentFarm.id, scenario);
-    this._reRender();
+    // Update model dropdown from loaded data
+    if (this._pywakeData && this._pywakeData.models) {
+      const pwModel = document.getElementById('sel-pywake-model');
+      const prevVal = pwModel.value;
+      pwModel.innerHTML = '';
+      this._pywakeData.models.forEach((m, i) => {
+        const opt = document.createElement('option');
+        opt.value = i;
+        opt.textContent = m;
+        if (m === 'ASO') opt.selected = true;
+        pwModel.appendChild(opt);
+      });
+    }
+    this._onModelToggleChanged();
   }
 
   /* ---- Update model controls for selected farm ---- */
@@ -1020,7 +1151,10 @@ class UIController {
 
   /* ---- Helpers ---- */
   _toDateStr(d) {
-    return d.toISOString().slice(0, 10);
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
   }
 }
 
