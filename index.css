@@ -964,3 +964,48 @@ input[type="date"]:focus {
 .model-dot.wrf-fitch { background: var(--accent-wrf-f); }
 .model-dot.wrf-ghost { background: var(--accent-wrf-g); }
 .model-dot.none { background: var(--text-muted); opacity: 0.4; }
+
+/* ---------- MELS Controls ---------- */
+.mels-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.color-picker {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 28px;
+  height: 28px;
+  border: 2px solid var(--border-subtle);
+  border-radius: 6px;
+  padding: 0;
+  cursor: pointer;
+  background: transparent;
+  transition: border-color 0.2s;
+}
+.color-picker::-webkit-color-swatch-wrapper { padding: 2px; }
+.color-picker::-webkit-color-swatch {
+  border: none;
+  border-radius: 3px;
+}
+.color-picker::-moz-color-swatch {
+  border: none;
+  border-radius: 3px;
+}
+.color-picker:hover {
+  border-color: var(--accent-cyan);
+}
+
+/* ---------- Model Comparison Stats ---------- */
+.model-stats {
+  border-top: 1px dashed var(--border-subtle);
+  padding-top: 12px;
+  margin-top: -4px;
+}
+
+.stat-card-model {
+  border-left: 3px solid var(--accent-pywake);
+}
+.stat-card-model:nth-child(3) { border-left-color: var(--accent-wrf-f); }
+.stat-card-model:nth-child(4) { border-left-color: var(--accent-wrf-g); }

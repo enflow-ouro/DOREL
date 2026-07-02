@@ -205,8 +205,8 @@ def process_pn(farm_id: str, year: int, input_dir: Path, output_dir: Path) -> in
 
 def process_mels(farm_id: str, year: int, input_dir: Path, output_dir: Path) -> int:
     """
-    Read ``{farm_id}_MELS_{year}.csv``, aggregate ``levelFrom`` per settlement
-    period (summing across BM units), and write ``mels_{year}.json``.
+    Read ``{farm_id}_MELS_{year}.csv``, keep only the latest notification
+    per BM unit per settlement period, then sum ``levelFrom`` across units.
 
     Returns the number of aggregated rows written.
     """
@@ -214,34 +214,49 @@ def process_mels(farm_id: str, year: int, input_dir: Path, output_dir: Path) -> 
     if not src.exists():
         return 0
 
-    # Accumulate: (settlementDate, settlementPeriod) -> { "timeFrom": ..., "level_sum": ... }
-    agg: dict[tuple[str, str], dict] = {}
+    # Step 1: For each (date, period, bmUnit), keep the row with the highest
+    # notificationSequence.
+    # key = (settlementDate, settlementPeriod, nationalGridBmUnit)
+    best: dict[tuple[str, str, str], dict] = {}
 
     with open(src, "r", encoding="utf-8", newline="") as fh:
         reader = csv.reader(fh)
         header = next(reader)
         try:
-            sd_idx = header.index("settlementDate")
-            sp_idx = header.index("settlementPeriod")
-            tf_idx = header.index("timeFrom")
-            lf_idx = header.index("levelFrom")
+            sd_idx  = header.index("settlementDate")
+            sp_idx  = header.index("settlementPeriod")
+            tf_idx  = header.index("timeFrom")
+            lf_idx  = header.index("levelFrom")
+            ns_idx  = header.index("notificationSequence")
+            unit_idx = header.index("nationalGridBmUnit")
         except ValueError:
             print(f"  WARNING: unexpected columns in {src.name}, skipping")
             return 0
 
         for row in reader:
-            if len(row) <= max(sd_idx, sp_idx, tf_idx, lf_idx):
+            if len(row) <= max(sd_idx, sp_idx, tf_idx, lf_idx, ns_idx, unit_idx):
                 continue
-            key = (row[sd_idx], row[sp_idx])
-            level = _parse_float(row[lf_idx])
-            entry = agg.get(key)
-            if entry is None:
-                agg[key] = {"timeFrom": row[tf_idx], "level_sum": level}
-            else:
-                entry["level_sum"] += level
+            key = (row[sd_idx], row[sp_idx], row[unit_idx])
+            seq = int(row[ns_idx])
+            prev = best.get(key)
+            if prev is None or seq > prev["seq"]:
+                best[key] = {
+                    "timeFrom": row[tf_idx],
+                    "level": _parse_float(row[lf_idx]),
+                    "seq": seq,
+                }
 
-    if not agg:
+    if not best:
         return 0
+
+    # Step 2: Sum levelFrom across BM units per (date, period)
+    agg: dict[tuple[str, str], dict] = {}
+    for (sd, sp, _unit), entry in best.items():
+        period_key = (sd, sp)
+        if period_key not in agg:
+            agg[period_key] = {"timeFrom": entry["timeFrom"], "level_sum": entry["level"]}
+        else:
+            agg[period_key]["level_sum"] += entry["level"]
 
     # Sort by (settlementDate, settlementPeriod as int)
     sorted_keys = sorted(agg.keys(), key=lambda k: (k[0], int(k[1])))

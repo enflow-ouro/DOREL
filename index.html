@@ -84,6 +84,15 @@
           <svg viewBox="0 0 20 20" fill="currentColor"><path d="M10 13l-4-4h3V3h2v6h3l-4 4z"/><path d="M4 15h12v2H4z"/></svg>
           Download CSV
         </button>
+
+        <div class="controls-sep"></div>
+
+        <div class="mels-group">
+          <label class="toggle-label">
+            <input id="toggle-mels" type="checkbox" checked> MELS
+          </label>
+          <input id="mels-color" type="color" value="#ffb830" class="color-picker" title="MELS line colour">
+        </div>
       </div>
 
       <!-- Model controls row (shown when model data available) -->
@@ -147,6 +156,26 @@
         <div class="stat-card">
           <div class="stat-label">Peak Output</div>
           <div class="stat-value" id="stat-peak">—<span class="stat-unit">MW</span></div>
+        </div>
+      </div>
+
+      <!-- Model comparison stats (shown when model data toggled on) -->
+      <div id="model-stats-row" class="stats-row model-stats" style="display:none;">
+        <div class="stat-card stat-card-model">
+          <div class="stat-label">PyWake Generation</div>
+          <div class="stat-value" id="stat-pywake-gen">--<span class="stat-unit">GWh</span></div>
+        </div>
+        <div class="stat-card stat-card-model">
+          <div class="stat-label">PyWake CF</div>
+          <div class="stat-value" id="stat-pywake-cf">--<span class="stat-unit">%</span></div>
+        </div>
+        <div class="stat-card stat-card-model">
+          <div class="stat-label">WRF Fitch Generation</div>
+          <div class="stat-value" id="stat-wrf-fitch-gen">--<span class="stat-unit">GWh</span></div>
+        </div>
+        <div class="stat-card stat-card-model">
+          <div class="stat-label">WRF Ghost Generation</div>
+          <div class="stat-value" id="stat-wrf-ghost-gen">--<span class="stat-unit">GWh</span></div>
         </div>
       </div>
 

@@ -244,14 +244,14 @@ class ChartManager {
       });
     }
 
-    // MELS (always visible when data available)
-    if (mels && mels.length > 0) {
+    // MELS (togglable, with user-selectable color)
+    if (opts.showMels && mels && mels.length > 0) {
       traces.push({
         x: mels.map(r => r[0]),
         y: mels.map(r => r[1]),
         type: 'scatter', mode: 'lines',
         name: 'MELS',
-        line: { color: tc.amber, width: 1.2, dash: 'dashdot' },
+        line: { color: opts.melsColor || tc.amber, width: 1.2, dash: 'dashdot' },
       });
     }
 
@@ -594,14 +594,18 @@ class UIController {
     document.getElementById('btn-theme-toggle').addEventListener('click', () => this._toggleTheme());
 
     // Model toggles
-    document.getElementById('toggle-pywake').addEventListener('change', () => this._reRender());
-    document.getElementById('toggle-wrf-fitch').addEventListener('change', () => this._reRender());
-    document.getElementById('toggle-wrf-ghost').addEventListener('change', () => this._reRender());
+    document.getElementById('toggle-pywake').addEventListener('change', () => this._onModelToggleChanged());
+    document.getElementById('toggle-wrf-fitch').addEventListener('change', () => this._onModelToggleChanged());
+    document.getElementById('toggle-wrf-ghost').addEventListener('change', () => this._onModelToggleChanged());
 
     // PyWake scenario change
     document.getElementById('sel-pywake-scenario').addEventListener('change', () => this._onPyWakeScenarioChanged());
     // PyWake model change
-    document.getElementById('sel-pywake-model').addEventListener('change', () => this._reRender());
+    document.getElementById('sel-pywake-model').addEventListener('change', () => this._onModelToggleChanged());
+
+    // MELS toggle + color picker
+    document.getElementById('toggle-mels').addEventListener('change', () => this._reRender());
+    document.getElementById('mels-color').addEventListener('input', () => this._reRender());
   }
 
   /* ---- Time resolution ---- */
@@ -847,6 +851,8 @@ class UIController {
   _getToggleOpts() {
     return {
       resolution: this._resolution,
+      showMels: document.getElementById('toggle-mels').checked,
+      melsColor: document.getElementById('mels-color').value,
     };
   }
 
@@ -872,6 +878,68 @@ class UIController {
     this._animateStat('stat-cf', cf, 1, '%');
     this._animateStat('stat-curtailment', boalfInRange.length, 0, '');
     this._animateStat('stat-peak', peakMW, 0, 'MW');
+
+    // Update model KPIs
+    this._updateModelStats(farm, startDate, endDate, hoursRange);
+  }
+
+  /* ---- Model KPI stats ---- */
+  _updateModelStats(farm, startDate, endDate, hoursRange) {
+    const md = this._buildModelData();
+    const inRange = (ts) => { const d = new Date(ts); return d >= startDate && d <= endDate; };
+    const statsRow = document.getElementById('model-stats-row');
+    let showRow = false;
+
+    // PyWake
+    if (md.showPyWake && md.pywake && md.pywake.data.length > 0) {
+      const mi = md.pywakeModelIndex || 0;
+      const filtered = md.pywake.data.filter(r => inRange(r[0]));
+      // PyWake data is 10-min resolution; each value is MW => MWh = MW * (10/60)
+      const pwMWh = filtered.reduce((s, r) => s + (r[1 + mi] || 0) * (10 / 60), 0);
+      const pwGWh = pwMWh / 1000;
+      const pwCF = hoursRange > 0 ? (pwMWh / (farm.capacity_mw * hoursRange)) * 100 : 0;
+      this._animateStat('stat-pywake-gen', pwGWh, 1, 'GWh');
+      this._animateStat('stat-pywake-cf', pwCF, 1, '%');
+      showRow = true;
+    } else {
+      document.getElementById('stat-pywake-gen').innerHTML = '--<span class="stat-unit">GWh</span>';
+      document.getElementById('stat-pywake-cf').innerHTML = '--<span class="stat-unit">%</span>';
+    }
+
+    // WRF Fitch
+    if (md.showWrfFitch && md.wrfFitch && md.wrfFitch.length > 0) {
+      const filtered = md.wrfFitch.filter(r => inRange(r[0]));
+      // WRF data is 10-min resolution; MW => MWh = MW * (10/60)
+      const wrfMWh = filtered.reduce((s, r) => s + (r[1] || 0) * (10 / 60), 0);
+      const wrfGWh = wrfMWh / 1000;
+      this._animateStat('stat-wrf-fitch-gen', wrfGWh, 1, 'GWh');
+      showRow = true;
+    } else {
+      document.getElementById('stat-wrf-fitch-gen').innerHTML = '--<span class="stat-unit">GWh</span>';
+    }
+
+    // WRF Ghost
+    if (md.showWrfGhost && md.wrfGhost && md.wrfGhost.length > 0) {
+      const filtered = md.wrfGhost.filter(r => inRange(r[0]));
+      const wrfMWh = filtered.reduce((s, r) => s + (r[1] || 0) * (10 / 60), 0);
+      const wrfGWh = wrfMWh / 1000;
+      this._animateStat('stat-wrf-ghost-gen', wrfGWh, 1, 'GWh');
+      showRow = true;
+    } else {
+      document.getElementById('stat-wrf-ghost-gen').innerHTML = '--<span class="stat-unit">GWh</span>';
+    }
+
+    statsRow.style.display = showRow ? '' : 'none';
+  }
+
+  /* ---- Model toggle changed (re-render + update KPIs) ---- */
+  _onModelToggleChanged() {
+    this._reRender();
+    if (this._currentFarm && this._startDate && this._endDate) {
+      const msRange = this._endDate - this._startDate;
+      const hoursRange = msRange / (1000 * 60 * 60);
+      this._updateModelStats(this._currentFarm, this._startDate, this._endDate, hoursRange);
+    }
   }
 
   _animateStat(elId, target, decimals, unit) {
