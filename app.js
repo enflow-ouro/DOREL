@@ -181,10 +181,10 @@ function aggregateToHourly(data, isMWh) {
 //  ChartManager – Plotly rendering
 // ─────────────────────────────────────────────
 class ChartManager {
-  constructor(chartId, curtailmentId, scatterId) {
+  constructor(chartId, curtailmentId, scatterSectionId) {
     this.chartId = chartId;
     this.curtailmentId = curtailmentId;
-    this.scatterId = scatterId;
+    this.scatterSectionId = scatterSectionId;
   }
 
   /** Get current theme colors from CSS custom properties */
@@ -455,14 +455,13 @@ class ChartManager {
     }
   }
 
-  /** Render daily production scatter: Elexon B1610 (x) vs ALL active models (y) */
+  /** Render daily + weekly scatter comparison with R², Bias, RMSE */
   _renderDailyScatter(b1610, startDate, endDate, modelData, tc) {
-    const container = document.getElementById(this.scatterId);
+    const section = document.getElementById(this.scatterSectionId);
     const md = modelData || {};
 
     // Build list of active model sources
     const sources = [];
-
     if (md.showPyWake && md.pywake && md.pywake.data.length > 0) {
       const mi = md.pywakeModelIndex || 0;
       sources.push({
@@ -472,30 +471,54 @@ class ChartManager {
       });
     }
     if (md.showWrfFitch && md.wrfFitch && md.wrfFitch.length > 0) {
-      sources.push({
-        label: 'WRF Fitch',
-        series: md.wrfFitch.map(r => ({ ts: r[0], mw: r[1] || 0 })),
-        color: tc.wrfF,
-      });
+      sources.push({ label: 'WRF Fitch', series: md.wrfFitch.map(r => ({ ts: r[0], mw: r[1] || 0 })), color: tc.wrfF });
     }
     if (md.showWrfGhost && md.wrfGhost && md.wrfGhost.length > 0) {
-      sources.push({
-        label: 'WRF Ghost',
-        series: md.wrfGhost.map(r => ({ ts: r[0], mw: r[1] || 0 })),
-        color: tc.wrfG,
-      });
+      sources.push({ label: 'WRF Ghost', series: md.wrfGhost.map(r => ({ ts: r[0], mw: r[1] || 0 })), color: tc.wrfG });
     }
 
     if (sources.length === 0 || b1610.length === 0) {
-      container.style.display = 'none';
-      Plotly.purge(this.scatterId);
+      section.style.display = 'none';
+      Plotly.purge('scatter-daily');
+      Plotly.purge('scatter-weekly');
+      document.getElementById('scatter-metrics').innerHTML = '';
       return;
     }
-    container.style.display = '';
+    section.style.display = '';
 
     const inRange = (ts) => { const d = new Date(ts); return d >= startDate && d <= endDate; };
 
-    // B1610 daily: data is [ts, mwh] at 30-min => sum per day
+    // Helper: compute stats
+    const computeStats = (xArr, yArr) => {
+      const n = xArr.length;
+      if (n < 2) return { r2: NaN, bias: NaN, rmse: NaN };
+      const mx = xArr.reduce((s, v) => s + v, 0) / n;
+      const my = yArr.reduce((s, v) => s + v, 0) / n;
+      let ssRes = 0, ssTot = 0, sumErr = 0, sumErr2 = 0;
+      for (let i = 0; i < n; i++) {
+        const err = yArr[i] - xArr[i];
+        sumErr += err;
+        sumErr2 += err * err;
+        ssRes += (yArr[i] - xArr[i]) ** 2;
+        ssTot += (xArr[i] - mx) ** 2;
+      }
+      return {
+        r2: ssTot > 0 ? 1 - ssRes / ssTot : NaN,
+        bias: sumErr / n,
+        rmse: Math.sqrt(sumErr2 / n),
+      };
+    };
+
+    // Helper: get ISO week key
+    const weekKey = (dateStr) => {
+      const d = new Date(dateStr + 'T12:00:00');
+      const jan4 = new Date(d.getFullYear(), 0, 4);
+      const dayOfYear = Math.ceil((d - new Date(d.getFullYear(), 0, 1)) / 86400000);
+      const weekNum = Math.ceil((dayOfYear + jan4.getDay()) / 7);
+      return d.getFullYear() + '-W' + String(weekNum).padStart(2, '0');
+    };
+
+    // Elexon daily
     const elexonDaily = {};
     for (const r of b1610) {
       if (!inRange(r[0])) continue;
@@ -503,11 +526,83 @@ class ChartManager {
       elexonDaily[day] = (elexonDaily[day] || 0) + r[1];
     }
 
-    const traces = [];
-    let globalMax = 0;
+    // Build per-source data for daily & weekly
+    const allMetrics = [];
+
+    const buildScatterPlot = (containerId, title, xLabel, yLabel, sourcesData) => {
+      const traces = [];
+      let globalMax = 0;
+      const annotations = [];
+
+      for (const sd of sourcesData) {
+        if (sd.x.length > 0) {
+          globalMax = Math.max(globalMax, ...sd.x, ...sd.y);
+          traces.push({
+            x: sd.x, y: sd.y,
+            type: 'scatter', mode: 'markers',
+            name: sd.label,
+            text: sd.hover, hoverinfo: 'text',
+            marker: { color: sd.color, size: 5, opacity: 0.7 },
+          });
+        }
+      }
+
+      if (traces.length === 0) { Plotly.purge(containerId); return; }
+
+      const maxVal = globalMax * 1.05;
+      traces.push({
+        x: [0, maxVal], y: [0, maxVal],
+        type: 'scatter', mode: 'lines', name: '1:1',
+        line: { color: tc.font, width: 1, dash: 'dot' },
+        hoverinfo: 'skip', showlegend: true,
+      });
+
+      // R² annotations
+      let annotY = 0.97;
+      for (const sd of sourcesData) {
+        if (sd.stats && !isNaN(sd.stats.r2)) {
+          annotations.push({
+            x: 0.03, y: annotY, xref: 'paper', yref: 'paper',
+            text: `<b>${sd.label}</b>: R²=${sd.stats.r2.toFixed(3)}`,
+            showarrow: false, font: { size: 10, color: sd.color },
+            xanchor: 'left',
+          });
+          annotY -= 0.07;
+        }
+      }
+
+      const layout = {
+        paper_bgcolor: tc.paper, plot_bgcolor: tc.plot,
+        font: { family: 'Inter, sans-serif', color: tc.font, size: 11 },
+        margin: { t: 36, r: 16, b: 52, l: 56 },
+        title: { text: title, font: { size: 13 } },
+        xaxis: {
+          title: { text: xLabel, font: { size: 10 } },
+          gridcolor: tc.grid, linecolor: tc.line,
+          range: [0, maxVal],
+        },
+        yaxis: {
+          title: { text: yLabel, font: { size: 10 } },
+          gridcolor: tc.grid, linecolor: tc.line,
+          range: [0, maxVal],
+          scaleanchor: 'x', scaleratio: 1,
+        },
+        height: 340,
+        showlegend: true,
+        legend: { x: 0.98, y: 0.02, xanchor: 'right', yanchor: 'bottom', bgcolor: 'rgba(0,0,0,0)', font: { size: 10 } },
+        hovermode: 'closest',
+        annotations: annotations,
+      };
+
+      Plotly.newPlot(containerId, traces, layout, { responsive: true, displayModeBar: false });
+    };
+
+    // Process each source
+    const dailyData = [];
+    const weeklyData = [];
 
     for (const src of sources) {
-      // Model daily: MW at 10-min => MWh = MW * (10/60), sum per day
+      // Daily model
       const modelDaily = {};
       for (const r of src.series) {
         if (!inRange(r.ts)) continue;
@@ -515,65 +610,52 @@ class ChartManager {
         modelDaily[day] = (modelDaily[day] || 0) + r.mw * (10 / 60);
       }
 
-      const days = Object.keys(elexonDaily).filter(d => d in modelDaily).sort();
-      const xVals = days.map(d => elexonDaily[d] / 1000); // GWh
-      const yVals = days.map(d => modelDaily[d] / 1000);  // GWh
-      const hoverText = days.map((d, i) =>
-        d + '<br>Elexon: ' + xVals[i].toFixed(2) + ' GWh<br>' + src.label + ': ' + yVals[i].toFixed(2) + ' GWh'
-      );
+      // Daily matched pairs
+      const dDays = Object.keys(elexonDaily).filter(d => d in modelDaily).sort();
+      const dX = dDays.map(d => elexonDaily[d] / 1000);
+      const dY = dDays.map(d => modelDaily[d] / 1000);
+      const dHover = dDays.map((d, i) => d + '<br>Elexon: ' + dX[i].toFixed(2) + '<br>' + src.label + ': ' + dY[i].toFixed(2) + ' GWh');
+      const dStats = computeStats(dX, dY);
 
-      if (xVals.length > 0) {
-        globalMax = Math.max(globalMax, ...xVals, ...yVals);
-        traces.push({
-          x: xVals, y: yVals,
-          type: 'scatter', mode: 'markers',
-          name: src.label,
-          text: hoverText, hoverinfo: 'text',
-          marker: { color: src.color, size: 6, opacity: 0.7 },
-        });
+      dailyData.push({ label: src.label, color: src.color, x: dX, y: dY, hover: dHover, stats: dStats });
+
+      // Weekly: aggregate daily to weekly
+      const elexonWeekly = {}, modelWeekly = {};
+      for (const d of dDays) {
+        const wk = weekKey(d);
+        elexonWeekly[wk] = (elexonWeekly[wk] || 0) + elexonDaily[d] / 1000;
+        modelWeekly[wk] = (modelWeekly[wk] || 0) + modelDaily[d] / 1000;
       }
+      const wks = Object.keys(elexonWeekly).sort();
+      const wX = wks.map(w => elexonWeekly[w]);
+      const wY = wks.map(w => modelWeekly[w]);
+      const wHover = wks.map((w, i) => w + '<br>Elexon: ' + wX[i].toFixed(2) + '<br>' + src.label + ': ' + wY[i].toFixed(2) + ' GWh');
+      const wStats = computeStats(wX, wY);
+
+      weeklyData.push({ label: src.label, color: src.color, x: wX, y: wY, hover: wHover, stats: wStats });
+
+      allMetrics.push({ label: src.label, color: src.color, daily: dStats, weekly: wStats });
     }
 
-    if (traces.length === 0) {
-      container.style.display = 'none';
-      Plotly.purge(this.scatterId);
-      return;
+    // Render both plots
+    buildScatterPlot('scatter-daily', 'Daily Production', 'Elexon B1610 (GWh/day)', 'Model (GWh/day)', dailyData);
+    buildScatterPlot('scatter-weekly', 'Weekly Production', 'Elexon B1610 (GWh/week)', 'Model (GWh/week)', weeklyData);
+
+    // Render metrics table
+    const fmt = (v, d = 3) => isNaN(v) ? '—' : v.toFixed(d);
+    let metricsHtml = '';
+    for (const m of allMetrics) {
+      metricsHtml += `<div class="metrics-block">
+        <div class="metrics-block-title"><span class="dot" style="background:${m.color}"></span>${m.label}</div>
+        <table class="metrics-table">
+          <tr><th></th><th style="text-align:right">Daily</th><th style="text-align:right">Weekly</th></tr>
+          <tr><th>R²</th><td>${fmt(m.daily.r2)}</td><td>${fmt(m.weekly.r2)}</td></tr>
+          <tr><th>Bias (GWh)</th><td>${fmt(m.daily.bias)}</td><td>${fmt(m.weekly.bias)}</td></tr>
+          <tr><th>RMSE (GWh)</th><td>${fmt(m.daily.rmse)}</td><td>${fmt(m.weekly.rmse)}</td></tr>
+        </table>
+      </div>`;
     }
-
-    // 1:1 reference line
-    const maxVal = globalMax * 1.05;
-    traces.push({
-      x: [0, maxVal], y: [0, maxVal],
-      type: 'scatter', mode: 'lines',
-      name: '1:1',
-      line: { color: tc.font, width: 1, dash: 'dot' },
-      hoverinfo: 'skip', showlegend: true,
-    });
-
-    const layout = {
-      paper_bgcolor: tc.paper,
-      plot_bgcolor: tc.plot,
-      font: { family: 'Inter, sans-serif', color: tc.font, size: 11 },
-      margin: { t: 36, r: 24, b: 52, l: 62 },
-      title: { text: 'Daily Production: Elexon vs Model', font: { size: 13 } },
-      xaxis: {
-        title: { text: 'Elexon B1610 (GWh/day)', font: { size: 11 } },
-        gridcolor: tc.grid, linecolor: tc.line,
-        rangemode: 'tozero',
-      },
-      yaxis: {
-        title: { text: 'Model (GWh/day)', font: { size: 11 } },
-        gridcolor: tc.grid, linecolor: tc.line,
-        rangemode: 'tozero',
-        scaleanchor: 'x', scaleratio: 1,
-      },
-      height: 350,
-      showlegend: true,
-      legend: { x: 0.02, y: 0.98, bgcolor: 'rgba(0,0,0,0)' },
-      hovermode: 'closest',
-    };
-
-    Plotly.newPlot(this.scatterId, traces, layout, { responsive: true, displayModeBar: false });
+    document.getElementById('scatter-metrics').innerHTML = metricsHtml;
   }
 
   updateVisibility(opts) {
@@ -638,7 +720,7 @@ class ChartManager {
 class UIController {
   constructor() {
     this.data  = new DataManager();
-    this.chart = new ChartManager('chart-container', 'curtailment-indicator', 'scatter-container');
+    this.chart = new ChartManager('chart-container', 'curtailment-indicator', 'scatter-section');
     this.activeFarmId = null;
     this._currentB1610 = [];
     this._currentBoalf = [];

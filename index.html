@@ -133,8 +133,14 @@
           <span class="curtailment-strip-label">Curtailment</span>
           <div id="curtailment-indicator"></div>
         </div>
-        <!-- Daily production scatter: Elexon vs Model -->
-        <div id="scatter-container" style="display:none;"></div>
+        <!-- Production scatter: Elexon vs Model (daily + weekly side by side) -->
+        <div id="scatter-section" style="display:none;">
+          <div class="scatter-row">
+            <div id="scatter-daily" class="scatter-panel"></div>
+            <div id="scatter-weekly" class="scatter-panel"></div>
+          </div>
+          <div id="scatter-metrics" class="scatter-metrics-row"></div>
+        </div>
         <div id="loading-overlay" class="loading-overlay">
           <div class="spinner"></div>
           <span class="loading-text">Loading farm data…</span>

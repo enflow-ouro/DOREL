@@ -1009,3 +1009,57 @@ input[type="date"]:focus {
 }
 .stat-card-model:nth-child(3) { border-left-color: var(--accent-wrf-f); }
 .stat-card-model:nth-child(4) { border-left-color: var(--accent-wrf-g); }
+
+/* ---------- Scatter Comparison ---------- */
+.scatter-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+.scatter-panel {
+  flex: 1;
+  min-width: 0;
+}
+.scatter-metrics-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 10px;
+  padding: 12px 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+}
+.metrics-block {
+  flex: 1;
+  min-width: 180px;
+}
+.metrics-block-title {
+  font-size: 0.78rem;
+  font-weight: 600;
+  margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.metrics-block-title .dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+.metrics-table {
+  width: 100%;
+  font-size: 0.75rem;
+  border-collapse: collapse;
+}
+.metrics-table th {
+  text-align: left;
+  font-weight: 500;
+  color: var(--text-muted);
+  padding: 2px 8px 2px 0;
+}
+.metrics-table td {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  padding: 2px 0;
+}
