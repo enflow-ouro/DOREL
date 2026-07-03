@@ -696,11 +696,18 @@
       ],
       "pywake": {
         "years": [
-          2023
+          2020,
+          2021,
+          2022,
+          2023,
+          2024,
+          2025
         ],
         "scenarios": [
           "cluster",
-          "standalone"
+          "standalone",
+          "era5_standalone",
+          "era5_cluster"
         ],
         "models": [
           "NOJ",
@@ -838,11 +845,18 @@
       ],
       "pywake": {
         "years": [
-          2023
+          2020,
+          2021,
+          2022,
+          2023,
+          2024,
+          2025
         ],
         "scenarios": [
           "cluster",
-          "standalone"
+          "standalone",
+          "era5_standalone",
+          "era5_cluster"
         ],
         "models": [
           "NOJ",
@@ -920,11 +934,18 @@
       ],
       "pywake": {
         "years": [
-          2023
+          2020,
+          2021,
+          2022,
+          2023,
+          2024,
+          2025
         ],
         "scenarios": [
           "cluster",
-          "standalone"
+          "standalone",
+          "era5_standalone",
+          "era5_cluster"
         ],
         "models": [
           "NOJ",

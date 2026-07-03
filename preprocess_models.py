@@ -181,14 +181,15 @@ def process_pywake():
 # =====================================================================
 #  ERA5 PyWake preprocessing
 # =====================================================================
-# ERA5 results CSV name → dashboard farm ID
+# ERA5 results: map farm slug → (farm_id, subfolder)
+# subfolder is relative to ERA5_RESULTS; None means files are in ERA5_RESULTS root
 ERA5_FARM_MAP = {
-    "dudgeon": "Dudgeon",
+    "dudgeon":          ("Dudgeon",          "dudgeon"),
+    "race-bank":        ("Race_Bank",         "race-bank"),
+    "sheringham-shoal": ("Sheringham_Shoal",  "sheringham-shoal"),
+    "triton-knoll":     ("Triton_Knoll",      "triton-knoll"),
     # Add more as results become available:
-    # "east-anglia-one": "East_Anglia_ONE",
-    # "race-bank": "Race_Bank",
-    # "sheringham-shoal": "Sheringham_Shoal",
-    # "triton-knoll": "Triton_Knoll",
+    # "east-anglia-one": ("East_Anglia_ONE", "east-anglia-one"),
 }
 
 # ERA5 scenarios: csv suffix → dashboard scenario name
@@ -222,33 +223,45 @@ def process_pywake_era5():
         print(f"  SKIP: {ERA5_RESULTS} not found")
         return results
 
-    for era5_name, farm_id in ERA5_FARM_MAP.items():
+    for era5_slug, (farm_id, subfolder) in ERA5_FARM_MAP.items():
         farm_scenarios = []
         all_years = set()
         all_models = []
 
+        # Results can be in a subfolder or directly in ERA5_RESULTS
+        farm_results_dir = (ERA5_RESULTS / subfolder) if subfolder else ERA5_RESULTS
+
         for csv_suffix, scenario_name in ERA5_SCENARIOS.items():
-            # Discover which models have CSVs for this farm+scenario
-            # Pattern: {farm}_era5_{Model}_{suffix}_timeseries.csv
-            # Also: {farm}_era5_{suffix}_timeseries.csv (the "default" / original run)
+            # Try two naming patterns:
+            # 1. {slug}_era5_{Model}_{suffix}_timeseries.csv  (dudgeon style)
+            # 2. {slug}_{Model}_{suffix}_timeseries.csv       (new farms style)
             found_models = []  # [(display_name, csv_path), ...]
 
             for model_key, display_name in ERA5_MODEL_ORDER:
-                csv_file = ERA5_RESULTS / f"{era5_name}_era5_{model_key}_{csv_suffix}_timeseries.csv"
-                if csv_file.exists():
-                    found_models.append((display_name, csv_file))
+                for pattern in [
+                    farm_results_dir / f"{era5_slug}_era5_{model_key}_{csv_suffix}_timeseries.csv",
+                    farm_results_dir / f"{era5_slug}_{model_key}_{csv_suffix}_timeseries.csv",
+                ]:
+                    if pattern.exists():
+                        found_models.append((display_name, pattern))
+                        break  # use first match
 
             if not found_models:
-                # Try the original single-model file
-                csv_file = ERA5_RESULTS / f"{era5_name}_era5_{csv_suffix}_timeseries.csv"
-                if csv_file.exists():
-                    found_models.append(("ERA5", csv_file))
-                else:
-                    print(f"  SKIP {era5_name}/{csv_suffix}: no CSV files found")
-                    continue
+                # Try legacy single-model fallbacks
+                for pattern in [
+                    farm_results_dir / f"{era5_slug}_era5_{csv_suffix}_timeseries.csv",
+                    farm_results_dir / f"{era5_slug}_{csv_suffix}_timeseries.csv",
+                ]:
+                    if pattern.exists():
+                        found_models.append(("ERA5", pattern))
+                        break
+
+            if not found_models:
+                print(f"  SKIP {era5_slug}/{csv_suffix}: no CSV files found")
+                continue
 
             model_names = [m[0] for m in found_models]
-            print(f"  Processing {era5_name} / {csv_suffix}: {len(found_models)} models ({', '.join(model_names)})")
+            print(f"  Processing {era5_slug} / {csv_suffix}: {len(found_models)} models ({', '.join(model_names)})")
 
             # Read all model CSVs and merge by timestamp
             # ts_data[ts_iso] = [power_model1, power_model2, ...]
