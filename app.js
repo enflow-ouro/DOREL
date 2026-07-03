@@ -1011,19 +1011,7 @@ class UIController {
       delete this.data._cache[this._currentFarm.id][cacheKey];
     }
     this._pywakeData = await this.data.loadPyWake(this._currentFarm.id, scenario, this._currentFarm.pywake.years || [2023]);
-    // Update model dropdown from loaded data
-    if (this._pywakeData && this._pywakeData.models) {
-      const pwModel = document.getElementById('sel-pywake-model');
-      const prevVal = pwModel.value;
-      pwModel.innerHTML = '';
-      this._pywakeData.models.forEach((m, i) => {
-        const opt = document.createElement('option');
-        opt.value = i;
-        opt.textContent = m;
-        if (m === 'ASO') opt.selected = true;
-        pwModel.appendChild(opt);
-      });
-    }
+    // Keep model dropdown populated from farm definition (full list), not loaded data
     this._onModelToggleChanged();
   }
 
