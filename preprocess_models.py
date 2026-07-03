@@ -219,16 +219,6 @@ def process_pywake_era5():
     print("\n=== Processing PyWake ERA5 ===")
     results = {}  # { farmId: { years: [...], scenarios: [...], models: [...] } }
 
-    # Load true capacities to fix ERA5 6MW generic turbine bug
-    farms_json_path = DATA_DIR / "farms.json"
-    farm_capacities = {}
-    if farms_json_path.exists():
-        with open(farms_json_path, "r", encoding="utf-8") as f:
-            fj = json.load(f)
-            for farm in fj.get("farms", []):
-                if "capacity_mw" in farm:
-                    farm_capacities[farm["id"]] = float(farm["capacity_mw"])
-
     if not ERA5_RESULTS.exists():
         print(f"  SKIP: {ERA5_RESULTS} not found")
         return results
@@ -284,19 +274,10 @@ def process_pywake_era5():
                     header = next(reader)
                     power_col = header.index("power_total_MWh")
 
-                    # Calculate scaling factor to fix 6MW generic turbine issue
-                    num_turbines = sum(1 for h in header if h.startswith("WT_"))
-                    era5_simulated_capacity = num_turbines * 6.0
-                    true_capacity = farm_capacities.get(farm_id, era5_simulated_capacity)
-                    scale_factor = true_capacity / era5_simulated_capacity if era5_simulated_capacity > 0 else 1.0
-
-                    if mi == 0 and "alone" in csv_suffix:
-                        print(f"    Scaling {farm_id}: sim_cap={era5_simulated_capacity}MW, true_cap={true_capacity}MW (factor={scale_factor:.3f})")
-
                     for row in reader:
                         ts = row[0].strip()
                         ts_iso = ts.replace(" ", "T")
-                        power_mw = round(float(row[power_col]) * scale_factor, 1)
+                        power_mw = round(float(row[power_col]), 1)
 
                         if ts_iso not in ts_data:
                             ts_data[ts_iso] = [0.0] * len(found_models)
