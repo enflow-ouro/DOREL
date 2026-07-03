@@ -19,6 +19,7 @@ DASHBOARD_DIR  = Path(__file__).resolve().parent
 DATA_DIR       = DASHBOARD_DIR / "data"
 
 PYWAKE_BASE    = DASHBOARD_DIR.parent / "benchmarks" / "results"
+ERA5_RESULTS   = DASHBOARD_DIR.parent / "benchmarks" / "era5" / "results"
 WRF_DIR        = Path(r"C:\Users\Usuario\Documents\POUNDS\density_power_csv")
 
 # ── PyWake farm mapping  (results dir name → dashboard farm id) ──────
@@ -178,6 +179,76 @@ def process_pywake():
 
 
 # =====================================================================
+#  ERA5 PyWake preprocessing
+# =====================================================================
+# ERA5 results CSV name → dashboard farm ID
+ERA5_FARM_MAP = {
+    "dudgeon": "Dudgeon",
+    # Add more as results become available:
+    # "east-anglia-one": "East_Anglia_ONE",
+    # "race-bank": "Race_Bank",
+    # "sheringham-shoal": "Sheringham_Shoal",
+    # "triton-knoll": "Triton_Knoll",
+}
+
+def process_pywake_era5():
+    """Process ERA5-driven PyWake results (hourly, multi-year)."""
+    print("\n=== Processing PyWake ERA5 ===")
+    results = {}  # { farmId: { years: [...] } }
+
+    if not ERA5_RESULTS.exists():
+        print(f"  SKIP: {ERA5_RESULTS} not found")
+        return results
+
+    for era5_name, farm_id in ERA5_FARM_MAP.items():
+        csv_file = ERA5_RESULTS / f"{era5_name}_era5_timeseries.csv"
+        if not csv_file.exists():
+            print(f"  SKIP {era5_name}: {csv_file.name} not found")
+            continue
+
+        print(f"  Processing {era5_name} -> {farm_id} ...")
+
+        # Read CSV: columns are timestamp, ws_hub_ms, wd_deg, power_total_MWh, WT_01..WT_N
+        year_data = {}  # { year: [[ts_iso, power_mw], ...] }
+
+        with open(csv_file, "r", newline="") as f:
+            reader = csv.reader(f)
+            header = next(reader)
+            # power_total_MWh is column index 3
+            power_col = header.index("power_total_MWh")
+
+            for row in reader:
+                ts = row[0].strip()  # "2020-01-01 00:00:00"
+                year = ts[:4]
+                ts_iso = ts.replace(" ", "T")  # "2020-01-01T00:00:00"
+                # Value is MWh over 1 hour = average MW during that hour
+                power_mw = round(float(row[power_col]), 1)
+
+                if year not in year_data:
+                    year_data[year] = []
+                year_data[year].append([ts_iso, power_mw])
+
+        # Write per-year JSON files
+        out_dir = DATA_DIR / farm_id
+        out_dir.mkdir(parents=True, exist_ok=True)
+        years_done = []
+
+        for year, data in sorted(year_data.items()):
+            out_file = out_dir / f"pywake_era5_{year}.json"
+            with open(out_file, "w") as f:
+                json.dump({"models": ["ERA5"], "data": data}, f, separators=(",", ":"))
+
+            size_mb = out_file.stat().st_size / (1024 * 1024)
+            print(f"    -> {out_file.name}  ({len(data)} rows, {size_mb:.1f} MB)")
+            years_done.append(int(year))
+
+        if years_done:
+            results[farm_id] = {"years": sorted(years_done)}
+
+    return results
+
+
+# =====================================================================
 #  WRF preprocessing
 # =====================================================================
 def process_wrf_set(month_files, variant_name):
@@ -272,24 +343,38 @@ def process_wrf_set(month_files, variant_name):
 # =====================================================================
 #  Update farms.json
 # =====================================================================
-def update_farms_json(pywake_results, wrf_fitch_farms, wrf_ghost_farms):
+def update_farms_json(pywake_results, wrf_fitch_farms, wrf_ghost_farms, era5_results=None):
     print("\n=== Updating farms.json ===")
     farms_file = DATA_DIR / "farms.json"
 
     with open(farms_file, "r") as f:
         farms_json = json.load(f)
 
+    era5_results = era5_results or {}
+
     for farm in farms_json["farms"]:
         fid = farm["id"]
 
-        # PyWake
+        # PyWake (MERRA2-based benchmarks)
         if fid in pywake_results:
             pw = pywake_results[fid]
-            farm["pywake"] = {
-                "years": [2023],
-                "scenarios": pw["scenarios"],
-                "models": pw["models"],
-            }
+            existing = farm.get("pywake", {"years": [], "scenarios": [], "models": []})
+            existing["years"] = sorted(set(existing.get("years", []) + [2023]))
+            existing["scenarios"] = sorted(set(existing.get("scenarios", []) + pw["scenarios"]))
+            existing["models"] = pw["models"]
+            farm["pywake"] = existing
+
+        # ERA5 PyWake
+        if fid in era5_results:
+            existing = farm.get("pywake", {"years": [], "scenarios": [], "models": []})
+            era5_years = era5_results[fid]["years"]
+            existing["years"] = sorted(set(existing.get("years", []) + era5_years))
+            if "era5" not in existing.get("scenarios", []):
+                existing["scenarios"] = existing.get("scenarios", []) + ["era5"]
+            # ERA5 has a single model; merge with existing models list
+            if "ERA5" not in existing.get("models", []):
+                existing["models"] = existing.get("models", []) + ["ERA5"]
+            farm["pywake"] = existing
 
         # WRF
         wrf_variants = []
@@ -316,19 +401,23 @@ if __name__ == "__main__":
     print("DOREL — Model Data Preprocessing")
     print("=" * 50)
 
-    # 1. PyWake
+    # 1. PyWake (MERRA2-based)
     pywake_results = process_pywake()
     print(f"\nPyWake: {len(pywake_results)} farms processed")
 
-    # 2. WRF Fitch
+    # 2. PyWake ERA5
+    era5_results = process_pywake_era5()
+    print(f"\nPyWake ERA5: {len(era5_results)} farms processed")
+
+    # 3. WRF Fitch
     wrf_fitch_farms = process_wrf_set(WRF_MONTHS_FITCH, "Fitch")
     print(f"\nWRF Fitch: {len(wrf_fitch_farms)} farms processed")
 
-    # 3. WRF Ghost
+    # 4. WRF Ghost
     wrf_ghost_farms = process_wrf_set(WRF_MONTHS_GHOST, "Ghost")
     print(f"\nWRF Ghost: {len(wrf_ghost_farms)} farms processed")
 
-    # 4. Update farms.json
-    update_farms_json(pywake_results, wrf_fitch_farms, wrf_ghost_farms)
+    # 5. Update farms.json
+    update_farms_json(pywake_results, wrf_fitch_farms, wrf_ghost_farms, era5_results)
 
     print("\nDone!")

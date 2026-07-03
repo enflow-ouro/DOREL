@@ -99,19 +99,37 @@ class DataManager {
   }
 
   /* ---- PyWake data ---- */
-  async loadPyWake(farmId, scenario) {
+  async loadPyWake(farmId, scenario, years) {
     const key = `pywake_${scenario}`;
     if (!this._cache[farmId]) this._cache[farmId] = { b1610: {}, pn: {}, mels: {}, boalf: null };
     if (this._cache[farmId][key]) return this._cache[farmId][key];
 
-    const url = `${DATA_BASE}/${farmId}/pywake_${scenario}_2023.json`;
-    console.log(`[DOREL] Fetching PyWake: ${url}`);
     try {
-      const res = await fetch(url);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json = await res.json();
-      console.log(`[DOREL] PyWake loaded: ${json.models?.length} models, ${json.data?.length} rows`);
-      this._cache[farmId][key] = json; // { models: [...], data: [[ts, v1, v2, ...], ...] }
+      if (scenario === 'era5' && years && years.length > 0) {
+        // ERA5: load per-year files and merge
+        console.log(`[DOREL] Fetching PyWake ERA5 for years: ${years}`);
+        const allData = [];
+        let models = ['ERA5'];
+        for (const yr of years) {
+          const url = `${DATA_BASE}/${farmId}/pywake_era5_${yr}.json`;
+          const res = await fetch(url);
+          if (!res.ok) continue;
+          const json = await res.json();
+          if (json.models) models = json.models;
+          if (json.data) allData.push(...json.data);
+        }
+        console.log(`[DOREL] PyWake ERA5 loaded: ${models.length} models, ${allData.length} rows`);
+        this._cache[farmId][key] = { models, data: allData };
+      } else {
+        // Standard scenario: single file
+        const url = `${DATA_BASE}/${farmId}/pywake_${scenario}_2023.json`;
+        console.log(`[DOREL] Fetching PyWake: ${url}`);
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const json = await res.json();
+        console.log(`[DOREL] PyWake loaded: ${json.models?.length} models, ${json.data?.length} rows`);
+        this._cache[farmId][key] = json;
+      }
     } catch (err) {
       console.error(`[DOREL] PyWake fetch failed:`, err);
       this._cache[farmId][key] = { models: [], data: [] };
@@ -464,17 +482,19 @@ class ChartManager {
     const sources = [];
     if (md.showPyWake && md.pywake && md.pywake.data.length > 0) {
       const mi = md.pywakeModelIndex || 0;
+      const isEra5 = md.pywake.models[mi] === 'ERA5' || (md.pywake.models.length === 1 && md.pywake.models[0] === 'ERA5');
       sources.push({
         label: 'PyWake ' + (md.pywake.models[mi] || ''),
         series: md.pywake.data.map(r => ({ ts: r[0], mw: r[1 + mi] || 0 })),
         color: tc.pywake,
+        mwhFactor: isEra5 ? 1 : (10 / 60), // ERA5=hourly MWh, MERRA2=10-min MW
       });
     }
     if (md.showWrfFitch && md.wrfFitch && md.wrfFitch.length > 0) {
-      sources.push({ label: 'WRF Fitch', series: md.wrfFitch.map(r => ({ ts: r[0], mw: r[1] || 0 })), color: tc.wrfF });
+      sources.push({ label: 'WRF Fitch', series: md.wrfFitch.map(r => ({ ts: r[0], mw: r[1] || 0 })), color: tc.wrfF, mwhFactor: 10 / 60 });
     }
     if (md.showWrfGhost && md.wrfGhost && md.wrfGhost.length > 0) {
-      sources.push({ label: 'WRF Ghost', series: md.wrfGhost.map(r => ({ ts: r[0], mw: r[1] || 0 })), color: tc.wrfG });
+      sources.push({ label: 'WRF Ghost', series: md.wrfGhost.map(r => ({ ts: r[0], mw: r[1] || 0 })), color: tc.wrfG, mwhFactor: 10 / 60 });
     }
 
     if (sources.length === 0 || b1610.length === 0) {
@@ -603,11 +623,12 @@ class ChartManager {
 
     for (const src of sources) {
       // Daily model
+      const mwhF = src.mwhFactor || (10 / 60);
       const modelDaily = {};
       for (const r of src.series) {
         if (!inRange(r.ts)) continue;
         const day = r.ts.slice(0, 10);
-        modelDaily[day] = (modelDaily[day] || 0) + r.mw * (10 / 60);
+        modelDaily[day] = (modelDaily[day] || 0) + r.mw * mwhF;
       }
 
       // Daily matched pairs
@@ -911,8 +932,9 @@ class UIController {
       // PyWake
       if (farm.pywake) {
         const scenario = document.getElementById('sel-pywake-scenario').value || 'standalone';
+        const pyYears = farm.pywake.years || [2023];
         modelFetches.push(
-          this.data.loadPyWake(farm.id, scenario).then(d => { this._pywakeData = d; })
+          this.data.loadPyWake(farm.id, scenario, pyYears).then(d => { this._pywakeData = d; })
         );
       } else {
         this._pywakeData = null;
@@ -986,7 +1008,7 @@ class UIController {
     if (this.data._cache[this._currentFarm.id]) {
       delete this.data._cache[this._currentFarm.id][cacheKey];
     }
-    this._pywakeData = await this.data.loadPyWake(this._currentFarm.id, scenario);
+    this._pywakeData = await this.data.loadPyWake(this._currentFarm.id, scenario, this._currentFarm.pywake.years || [2023]);
     // Update model dropdown from loaded data
     if (this._pywakeData && this._pywakeData.models) {
       const pwModel = document.getElementById('sel-pywake-model');
@@ -1189,7 +1211,7 @@ class UIController {
       if (this.data._cache[farm.id] && this.data._cache[farm.id][key] && this.data._cache[farm.id][key].data.length === 0) {
         delete this.data._cache[farm.id][key];
       }
-      reloads.push(this.data.loadPyWake(farm.id, scenario).then(d => { this._pywakeData = d; }));
+      reloads.push(this.data.loadPyWake(farm.id, scenario, farm.pywake.years || [2023]).then(d => { this._pywakeData = d; }));
     }
     if (wrfFChecked && farm.wrf && farm.wrf.variants.includes('fitch') && (!this._wrfFitchData || this._wrfFitchData.length === 0)) {
       const key = 'wrf_fitch';
