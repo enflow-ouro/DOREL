@@ -484,7 +484,7 @@ class ChartManager {
     const sources = [];
     if (md.showPyWake && md.pywake && md.pywake.data.length > 0) {
       const mi = md.pywakeModelIndex || 0;
-      const isEra5 = md.pywake.models[mi] === 'ERA5' || (md.pywake.models.length === 1 && md.pywake.models[0] === 'ERA5');
+      const isEra5 = md.pywakeScenario && md.pywakeScenario.startsWith('era5');
       sources.push({
         label: 'PyWake ' + (md.pywake.models[mi] || ''),
         series: md.pywake.data.map(r => ({ ts: r[0], mw: r[1 + mi] || 0 })),
@@ -990,12 +990,14 @@ class UIController {
     const mi = modelSelect ? parseInt(modelSelect.value) || 0 : 0;
     const pwData = this._pywakeData;
     console.log(`[DOREL] _buildModelData: showPyWake=${document.getElementById('toggle-pywake').checked}, modelIndex=${mi}, modelDropdownVal="${modelSelect?.value}", pywakeData=${pwData ? pwData.data?.length + ' rows' : 'null'}`);
+    const scenario = document.getElementById('sel-pywake-scenario');
     return {
       showPyWake:   document.getElementById('toggle-pywake').checked,
       showWrfFitch: document.getElementById('toggle-wrf-fitch').checked,
       showWrfGhost: document.getElementById('toggle-wrf-ghost').checked,
       pywake:       pwData,
       pywakeModelIndex: mi,
+      pywakeScenario: scenario ? scenario.value : '',
       wrfFitch:     this._wrfFitchData,
       wrfGhost:     this._wrfGhostData,
     };

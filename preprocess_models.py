@@ -197,10 +197,26 @@ ERA5_SCENARIOS = {
     "cluster": "era5_cluster",
 }
 
+# Model name mapping: CSV filename fragment → display name
+ERA5_MODEL_ORDER = [
+    ("NOJ",                "NOJ"),
+    ("BastankhahGaussian", "Bastankhah"),
+    ("NiayifarGaussian",   "Niayifar"),
+    ("TurboNOJ",           "TurboNOJ"),
+    ("TurboGaussian",      "TurboGaussian"),
+    ("SuperGaussian",      "Blondel"),
+    ("GCL",                "GCL"),
+    ("ASODiffusion",       "ASO"),
+]
+
 def process_pywake_era5():
-    """Process ERA5-driven PyWake results (hourly, multi-year, standalone + cluster)."""
+    """Process ERA5-driven PyWake results (hourly, multi-year, multi-model).
+
+    Discovers per-model CSV files and merges them into multi-column JSON
+    matching the MERRA2 format: {models: [...], data: [[ts, v1, v2, ...], ...]}
+    """
     print("\n=== Processing PyWake ERA5 ===")
-    results = {}  # { farmId: { years: [...], scenarios: [...] } }
+    results = {}  # { farmId: { years: [...], scenarios: [...], models: [...] } }
 
     if not ERA5_RESULTS.exists():
         print(f"  SKIP: {ERA5_RESULTS} not found")
@@ -209,52 +225,80 @@ def process_pywake_era5():
     for era5_name, farm_id in ERA5_FARM_MAP.items():
         farm_scenarios = []
         all_years = set()
+        all_models = []
 
         for csv_suffix, scenario_name in ERA5_SCENARIOS.items():
-            csv_file = ERA5_RESULTS / f"{era5_name}_era5_{csv_suffix}_timeseries.csv"
-            if not csv_file.exists():
-                print(f"  SKIP {era5_name}/{csv_suffix}: {csv_file.name} not found")
-                continue
+            # Discover which models have CSVs for this farm+scenario
+            # Pattern: {farm}_era5_{Model}_{suffix}_timeseries.csv
+            # Also: {farm}_era5_{suffix}_timeseries.csv (the "default" / original run)
+            found_models = []  # [(display_name, csv_path), ...]
 
-            print(f"  Processing {era5_name} / {csv_suffix} -> {farm_id} ...")
+            for model_key, display_name in ERA5_MODEL_ORDER:
+                csv_file = ERA5_RESULTS / f"{era5_name}_era5_{model_key}_{csv_suffix}_timeseries.csv"
+                if csv_file.exists():
+                    found_models.append((display_name, csv_file))
 
-            # Read CSV
-            year_data = {}  # { year: [[ts_iso, power_mw], ...] }
+            if not found_models:
+                # Try the original single-model file
+                csv_file = ERA5_RESULTS / f"{era5_name}_era5_{csv_suffix}_timeseries.csv"
+                if csv_file.exists():
+                    found_models.append(("ERA5", csv_file))
+                else:
+                    print(f"  SKIP {era5_name}/{csv_suffix}: no CSV files found")
+                    continue
 
-            with open(csv_file, "r", newline="") as f:
-                reader = csv.reader(f)
-                header = next(reader)
-                power_col = header.index("power_total_MWh")
+            model_names = [m[0] for m in found_models]
+            print(f"  Processing {era5_name} / {csv_suffix}: {len(found_models)} models ({', '.join(model_names)})")
 
-                for row in reader:
-                    ts = row[0].strip()
-                    year = ts[:4]
-                    ts_iso = ts.replace(" ", "T")
-                    power_mw = round(float(row[power_col]), 1)
+            # Read all model CSVs and merge by timestamp
+            # ts_data[ts_iso] = [power_model1, power_model2, ...]
+            ts_data = {}
+            ts_order = []  # preserve insertion order
 
-                    if year not in year_data:
-                        year_data[year] = []
-                    year_data[year].append([ts_iso, power_mw])
+            for mi, (display_name, csv_path) in enumerate(found_models):
+                with open(csv_path, "r", newline="") as f:
+                    reader = csv.reader(f)
+                    header = next(reader)
+                    power_col = header.index("power_total_MWh")
 
-            # Write per-year JSON files
+                    for row in reader:
+                        ts = row[0].strip()
+                        ts_iso = ts.replace(" ", "T")
+                        power_mw = round(float(row[power_col]), 1)
+
+                        if ts_iso not in ts_data:
+                            ts_data[ts_iso] = [0.0] * len(found_models)
+                            ts_order.append(ts_iso)
+                        ts_data[ts_iso][mi] = power_mw
+
+            # Split by year and write JSON
+            year_data = {}  # { year: [[ts_iso, v1, v2, ...], ...] }
+            for ts_iso in ts_order:
+                year = ts_iso[:4]
+                if year not in year_data:
+                    year_data[year] = []
+                year_data[year].append([ts_iso] + ts_data[ts_iso])
+
             out_dir = DATA_DIR / farm_id
             out_dir.mkdir(parents=True, exist_ok=True)
 
             for year, data in sorted(year_data.items()):
                 out_file = out_dir / f"pywake_{scenario_name}_{year}.json"
                 with open(out_file, "w") as f:
-                    json.dump({"models": ["ERA5"], "data": data}, f, separators=(",", ":"))
+                    json.dump({"models": model_names, "data": data}, f, separators=(",", ":"))
 
                 size_mb = out_file.stat().st_size / (1024 * 1024)
-                print(f"    -> {out_file.name}  ({len(data)} rows, {size_mb:.1f} MB)")
+                print(f"    -> {out_file.name}  ({len(data)} rows, {size_mb:.1f} MB, {len(model_names)} models)")
                 all_years.add(int(year))
 
             farm_scenarios.append(scenario_name)
+            all_models = model_names  # same models for all scenarios
 
         if farm_scenarios:
             results[farm_id] = {
                 "years": sorted(all_years),
                 "scenarios": farm_scenarios,
+                "models": all_models,
             }
 
     return results
@@ -384,8 +428,10 @@ def update_farms_json(pywake_results, wrf_fitch_farms, wrf_ghost_farms, era5_res
             for sc in era5_info["scenarios"]:
                 if sc not in existing.get("scenarios", []):
                     existing["scenarios"] = existing.get("scenarios", []) + [sc]
-            if "ERA5" not in existing.get("models", []):
-                existing["models"] = existing.get("models", []) + ["ERA5"]
+            # Merge model names (ERA5 now uses same model names as MERRA2)
+            for m in era5_info.get("models", []):
+                if m not in existing.get("models", []):
+                    existing["models"] = existing.get("models", []) + [m]
             farm["pywake"] = existing
 
         # WRF

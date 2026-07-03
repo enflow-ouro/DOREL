@@ -181,9 +181,9 @@
         ],
         "scenarios": [
           "cluster",
-          "standalone",
+          "era5_cluster",
           "era5_standalone",
-          "era5_cluster"
+          "standalone"
         ],
         "models": [
           "NOJ",
@@ -194,8 +194,7 @@
           "Blondel",
           "GCL",
           "ASO",
-          "Fuga",
-          "ERA5"
+          "Fuga"
         ]
       },
       "wrf": {
