@@ -705,9 +705,9 @@
         ],
         "scenarios": [
           "cluster",
-          "standalone",
+          "era5_cluster",
           "era5_standalone",
-          "era5_cluster"
+          "standalone"
         ],
         "models": [
           "NOJ",
@@ -854,9 +854,9 @@
         ],
         "scenarios": [
           "cluster",
-          "standalone",
+          "era5_cluster",
           "era5_standalone",
-          "era5_cluster"
+          "standalone"
         ],
         "models": [
           "NOJ",
@@ -943,9 +943,9 @@
         ],
         "scenarios": [
           "cluster",
-          "standalone",
+          "era5_cluster",
           "era5_standalone",
-          "era5_cluster"
+          "standalone"
         ],
         "models": [
           "NOJ",
