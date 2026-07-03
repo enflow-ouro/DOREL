@@ -182,7 +182,8 @@
         "scenarios": [
           "cluster",
           "standalone",
-          "era5"
+          "era5_standalone",
+          "era5_cluster"
         ],
         "models": [
           "NOJ",

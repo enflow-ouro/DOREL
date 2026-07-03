@@ -104,24 +104,26 @@ class DataManager {
     if (!this._cache[farmId]) this._cache[farmId] = { b1610: {}, pn: {}, mels: {}, boalf: null };
     if (this._cache[farmId][key]) return this._cache[farmId][key];
 
+    const isEra5 = scenario.startsWith('era5');
+
     try {
-      if (scenario === 'era5' && years && years.length > 0) {
+      if (isEra5 && years && years.length > 0) {
         // ERA5: load per-year files and merge
-        console.log(`[DOREL] Fetching PyWake ERA5 for years: ${years}`);
+        console.log(`[DOREL] Fetching PyWake ${scenario} for years: ${years}`);
         const allData = [];
         let models = ['ERA5'];
         for (const yr of years) {
-          const url = `${DATA_BASE}/${farmId}/pywake_era5_${yr}.json`;
+          const url = `${DATA_BASE}/${farmId}/pywake_${scenario}_${yr}.json`;
           const res = await fetch(url);
           if (!res.ok) continue;
           const json = await res.json();
           if (json.models) models = json.models;
           if (json.data) allData.push(...json.data);
         }
-        console.log(`[DOREL] PyWake ERA5 loaded: ${models.length} models, ${allData.length} rows`);
+        console.log(`[DOREL] PyWake ${scenario} loaded: ${models.length} models, ${allData.length} rows`);
         this._cache[farmId][key] = { models, data: allData };
       } else {
-        // Standard scenario: single file
+        // Standard scenario: single file per year (default 2023)
         const url = `${DATA_BASE}/${farmId}/pywake_${scenario}_2023.json`;
         console.log(`[DOREL] Fetching PyWake: ${url}`);
         const res = await fetch(url);

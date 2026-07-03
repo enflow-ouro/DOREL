@@ -191,59 +191,71 @@ ERA5_FARM_MAP = {
     # "triton-knoll": "Triton_Knoll",
 }
 
+# ERA5 scenarios: csv suffix → dashboard scenario name
+ERA5_SCENARIOS = {
+    "alone":   "era5_standalone",
+    "cluster": "era5_cluster",
+}
+
 def process_pywake_era5():
-    """Process ERA5-driven PyWake results (hourly, multi-year)."""
+    """Process ERA5-driven PyWake results (hourly, multi-year, standalone + cluster)."""
     print("\n=== Processing PyWake ERA5 ===")
-    results = {}  # { farmId: { years: [...] } }
+    results = {}  # { farmId: { years: [...], scenarios: [...] } }
 
     if not ERA5_RESULTS.exists():
         print(f"  SKIP: {ERA5_RESULTS} not found")
         return results
 
     for era5_name, farm_id in ERA5_FARM_MAP.items():
-        csv_file = ERA5_RESULTS / f"{era5_name}_era5_timeseries.csv"
-        if not csv_file.exists():
-            print(f"  SKIP {era5_name}: {csv_file.name} not found")
-            continue
+        farm_scenarios = []
+        all_years = set()
 
-        print(f"  Processing {era5_name} -> {farm_id} ...")
+        for csv_suffix, scenario_name in ERA5_SCENARIOS.items():
+            csv_file = ERA5_RESULTS / f"{era5_name}_era5_{csv_suffix}_timeseries.csv"
+            if not csv_file.exists():
+                print(f"  SKIP {era5_name}/{csv_suffix}: {csv_file.name} not found")
+                continue
 
-        # Read CSV: columns are timestamp, ws_hub_ms, wd_deg, power_total_MWh, WT_01..WT_N
-        year_data = {}  # { year: [[ts_iso, power_mw], ...] }
+            print(f"  Processing {era5_name} / {csv_suffix} -> {farm_id} ...")
 
-        with open(csv_file, "r", newline="") as f:
-            reader = csv.reader(f)
-            header = next(reader)
-            # power_total_MWh is column index 3
-            power_col = header.index("power_total_MWh")
+            # Read CSV
+            year_data = {}  # { year: [[ts_iso, power_mw], ...] }
 
-            for row in reader:
-                ts = row[0].strip()  # "2020-01-01 00:00:00"
-                year = ts[:4]
-                ts_iso = ts.replace(" ", "T")  # "2020-01-01T00:00:00"
-                # Value is MWh over 1 hour = average MW during that hour
-                power_mw = round(float(row[power_col]), 1)
+            with open(csv_file, "r", newline="") as f:
+                reader = csv.reader(f)
+                header = next(reader)
+                power_col = header.index("power_total_MWh")
 
-                if year not in year_data:
-                    year_data[year] = []
-                year_data[year].append([ts_iso, power_mw])
+                for row in reader:
+                    ts = row[0].strip()
+                    year = ts[:4]
+                    ts_iso = ts.replace(" ", "T")
+                    power_mw = round(float(row[power_col]), 1)
 
-        # Write per-year JSON files
-        out_dir = DATA_DIR / farm_id
-        out_dir.mkdir(parents=True, exist_ok=True)
-        years_done = []
+                    if year not in year_data:
+                        year_data[year] = []
+                    year_data[year].append([ts_iso, power_mw])
 
-        for year, data in sorted(year_data.items()):
-            out_file = out_dir / f"pywake_era5_{year}.json"
-            with open(out_file, "w") as f:
-                json.dump({"models": ["ERA5"], "data": data}, f, separators=(",", ":"))
+            # Write per-year JSON files
+            out_dir = DATA_DIR / farm_id
+            out_dir.mkdir(parents=True, exist_ok=True)
 
-            size_mb = out_file.stat().st_size / (1024 * 1024)
-            print(f"    -> {out_file.name}  ({len(data)} rows, {size_mb:.1f} MB)")
-            years_done.append(int(year))
+            for year, data in sorted(year_data.items()):
+                out_file = out_dir / f"pywake_{scenario_name}_{year}.json"
+                with open(out_file, "w") as f:
+                    json.dump({"models": ["ERA5"], "data": data}, f, separators=(",", ":"))
 
-        if years_done:
-            results[farm_id] = {"years": sorted(years_done)}
+                size_mb = out_file.stat().st_size / (1024 * 1024)
+                print(f"    -> {out_file.name}  ({len(data)} rows, {size_mb:.1f} MB)")
+                all_years.add(int(year))
+
+            farm_scenarios.append(scenario_name)
+
+        if farm_scenarios:
+            results[farm_id] = {
+                "years": sorted(all_years),
+                "scenarios": farm_scenarios,
+            }
 
     return results
 
@@ -367,11 +379,11 @@ def update_farms_json(pywake_results, wrf_fitch_farms, wrf_ghost_farms, era5_res
         # ERA5 PyWake
         if fid in era5_results:
             existing = farm.get("pywake", {"years": [], "scenarios": [], "models": []})
-            era5_years = era5_results[fid]["years"]
-            existing["years"] = sorted(set(existing.get("years", []) + era5_years))
-            if "era5" not in existing.get("scenarios", []):
-                existing["scenarios"] = existing.get("scenarios", []) + ["era5"]
-            # ERA5 has a single model; merge with existing models list
+            era5_info = era5_results[fid]
+            existing["years"] = sorted(set(existing.get("years", []) + era5_info["years"]))
+            for sc in era5_info["scenarios"]:
+                if sc not in existing.get("scenarios", []):
+                    existing["scenarios"] = existing.get("scenarios", []) + [sc]
             if "ERA5" not in existing.get("models", []):
                 existing["models"] = existing.get("models", []) + ["ERA5"]
             farm["pywake"] = existing
