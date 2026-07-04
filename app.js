@@ -1164,10 +1164,13 @@ class UIController {
       // WRF data is 10-min resolution; MW => MWh = MW * (10/60)
       const wrfMWh = filtered.reduce((s, r) => s + (r[1] || 0) * (10 / 60), 0);
       const wrfGWh = wrfMWh / 1000;
+      const wrfCF = hoursRange > 0 ? (wrfMWh / (farm.capacity_mw * hoursRange)) * 100 : 0;
       this._animateStat('stat-wrf-fitch-gen', wrfGWh, 1, 'GWh');
+      this._animateStat('stat-wrf-fitch-cf', wrfCF, 1, '%');
       showRow = true;
     } else {
       document.getElementById('stat-wrf-fitch-gen').innerHTML = '--<span class="stat-unit">GWh</span>';
+      document.getElementById('stat-wrf-fitch-cf').innerHTML = '--<span class="stat-unit">%</span>';
     }
 
     // WRF Ghost
@@ -1175,10 +1178,13 @@ class UIController {
       const filtered = md.wrfGhost.filter(r => inRange(r[0]));
       const wrfMWh = filtered.reduce((s, r) => s + (r[1] || 0) * (10 / 60), 0);
       const wrfGWh = wrfMWh / 1000;
+      const wrfCF = hoursRange > 0 ? (wrfMWh / (farm.capacity_mw * hoursRange)) * 100 : 0;
       this._animateStat('stat-wrf-ghost-gen', wrfGWh, 1, 'GWh');
+      this._animateStat('stat-wrf-ghost-cf', wrfCF, 1, '%');
       showRow = true;
     } else {
       document.getElementById('stat-wrf-ghost-gen').innerHTML = '--<span class="stat-unit">GWh</span>';
+      document.getElementById('stat-wrf-ghost-cf').innerHTML = '--<span class="stat-unit">%</span>';
     }
 
     statsRow.style.display = showRow ? '' : 'none';
