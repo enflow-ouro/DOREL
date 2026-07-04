@@ -195,15 +195,23 @@ def process_pywake():
 # =====================================================================
 #  ERA5 PyWake preprocessing
 # =====================================================================
-# ERA5 results: map farm slug → (farm_id, subfolder)
+# ERA5 results: map farm_id → list of (era5_slug, subfolder)
 # subfolder is relative to ERA5_RESULTS; None means files are in ERA5_RESULTS root
 ERA5_FARM_MAP = {
-    "dudgeon":          ("Dudgeon",          "dudgeon"),
-    "race-bank":        ("Race_Bank",         "race-bank"),
-    "sheringham-shoal": ("Sheringham_Shoal",  "sheringham-shoal"),
-    "triton-knoll":     ("Triton_Knoll",      "triton-knoll"),
-    # Add more as results become available:
-    # "east-anglia-one": ("East_Anglia_ONE", "east-anglia-one"),
+    "Dudgeon":          [("dudgeon",          "dudgeon")],
+    "Race_Bank":        [("race-bank",         "race-bank")],
+    "Sheringham_Shoal": [("sheringham-shoal",  "sheringham-shoal")],
+    "Triton_Knoll":     [("triton-knoll",      "triton-knoll")],
+    "Barrow":           [("barrow",            "barrow")],
+    "Burbo_Bank":       [("burbo-bank",        "burbo-bank")],
+    "Burbo_Bank_Extension": [("burbo-bank-extension", "burbo-bank-extension")],
+    "Gwynt_y_Mor":      [("gwynt-y-mor",       "gwynt-y-mor")],
+    "Ormonde":          [("ormonde",           "ormonde")],
+    "Walney_One":       [("walney-1",          "walney-1"),
+                         ("walney-2",          "walney-2")],
+    "Walney_Extension": [("walney-extension-3", "walney-extension-3"),
+                         ("walney-extension-4", "walney-extension-4")],
+    "West_of_Duddon_Sands": [("west-of-duddon-sands", "west-of-duddon-sands")],
 }
 
 # ERA5 scenarios: csv suffix → dashboard scenario name
@@ -237,69 +245,79 @@ def process_pywake_era5():
         print(f"  SKIP: {ERA5_RESULTS} not found")
         return results
 
-    for era5_slug, (farm_id, subfolder) in ERA5_FARM_MAP.items():
+    for farm_id, slug_list in ERA5_FARM_MAP.items():
         farm_scenarios = []
         all_years = set()
         all_models = []
 
-        # Results can be in a subfolder or directly in ERA5_RESULTS
-        farm_results_dir = (ERA5_RESULTS / subfolder) if subfolder else ERA5_RESULTS
-
         for csv_suffix, scenario_name in ERA5_SCENARIOS.items():
-            # Try two naming patterns:
-            # 1. {slug}_era5_{Model}_{suffix}_timeseries.csv  (dudgeon style)
-            # 2. {slug}_{Model}_{suffix}_timeseries.csv       (new farms style)
-            found_models = []  # [(display_name, csv_path), ...]
+            # ts_data[ts_iso] = [sum_model1, sum_model2, ...]
+            ts_data = {}
+            ts_order = []
+            valid_slugs_processed = 0
+            model_names = []
 
-            for model_key, display_name in ERA5_MODEL_ORDER:
-                for pattern in [
-                    farm_results_dir / f"{era5_slug}_era5_{model_key}_{csv_suffix}_timeseries.csv",
-                    farm_results_dir / f"{era5_slug}_{model_key}_{csv_suffix}_timeseries.csv",
-                ]:
-                    if pattern.exists():
-                        found_models.append((display_name, pattern))
-                        break  # use first match
+            for era5_slug, subfolder in slug_list:
+                farm_results_dir = (ERA5_RESULTS / subfolder) if subfolder else ERA5_RESULTS
+                found_models = []  # [(display_name, csv_path), ...]
 
-            if not found_models:
-                # Try legacy single-model fallbacks
-                for pattern in [
-                    farm_results_dir / f"{era5_slug}_era5_{csv_suffix}_timeseries.csv",
-                    farm_results_dir / f"{era5_slug}_{csv_suffix}_timeseries.csv",
-                ]:
-                    if pattern.exists():
-                        found_models.append(("ERA5", pattern))
-                        break
+                for model_key, display_name in ERA5_MODEL_ORDER:
+                    for pattern in [
+                        farm_results_dir / f"{era5_slug}_era5_{model_key}_{csv_suffix}_timeseries.csv",
+                        farm_results_dir / f"{era5_slug}_{model_key}_{csv_suffix}_timeseries.csv",
+                    ]:
+                        if pattern.exists():
+                            found_models.append((display_name, pattern))
+                            break
 
-            if not found_models:
-                print(f"  SKIP {era5_slug}/{csv_suffix}: no CSV files found")
+                if not found_models:
+                    for pattern in [
+                        farm_results_dir / f"{era5_slug}_era5_{csv_suffix}_timeseries.csv",
+                        farm_results_dir / f"{era5_slug}_{csv_suffix}_timeseries.csv",
+                    ]:
+                        if pattern.exists():
+                            found_models.append(("ERA5", pattern))
+                            break
+
+                if not found_models:
+                    print(f"  SKIP {era5_slug}/{csv_suffix}: no CSV files found")
+                    continue
+
+                if not model_names:
+                    model_names = [m[0] for m in found_models]
+                
+                print(f"  Processing {era5_slug} / {csv_suffix}: {len(found_models)} models")
+
+                for mi, (display_name, csv_path) in enumerate(found_models):
+                    with open(csv_path, "r", newline="") as f:
+                        reader = csv.reader(f)
+                        header = next(reader)
+                        power_col = header.index("power_total_MWh")
+
+                        for row in reader:
+                            ts = row[0].strip()
+                            ts_iso = ts.replace(" ", "T")
+                            power_mw = round(float(row[power_col]), 1)
+
+                            if ts_iso not in ts_data:
+                                ts_data[ts_iso] = [0.0] * len(found_models)
+                                if mi == 0:
+                                    ts_order.append(ts_iso)
+                            ts_data[ts_iso][mi] += power_mw
+                            
+                valid_slugs_processed += 1
+
+            if valid_slugs_processed == 0:
                 continue
 
-            model_names = [m[0] for m in found_models]
-            print(f"  Processing {era5_slug} / {csv_suffix}: {len(found_models)} models ({', '.join(model_names)})")
-
-            # Read all model CSVs and merge by timestamp
-            # ts_data[ts_iso] = [power_model1, power_model2, ...]
-            ts_data = {}
-            ts_order = []  # preserve insertion order
-
-            for mi, (display_name, csv_path) in enumerate(found_models):
-                with open(csv_path, "r", newline="") as f:
-                    reader = csv.reader(f)
-                    header = next(reader)
-                    power_col = header.index("power_total_MWh")
-
-                    for row in reader:
-                        ts = row[0].strip()
-                        ts_iso = ts.replace(" ", "T")
-                        power_mw = round(float(row[power_col]), 1)
-                        tec = FARM_TEC_MAP.get(farm_id)
-                        if tec:
-                            power_mw = min(power_mw, tec)
-
-                        if ts_iso not in ts_data:
-                            ts_data[ts_iso] = [0.0] * len(found_models)
-                            ts_order.append(ts_iso)
-                        ts_data[ts_iso][mi] = power_mw
+            # Cap the aggregated power at the TEC limit
+            tec = FARM_TEC_MAP.get(farm_id)
+            if tec:
+                for ts_iso in ts_order:
+                    ts_data[ts_iso] = [min(round(v, 1), tec) for v in ts_data[ts_iso]]
+            else:
+                for ts_iso in ts_order:
+                    ts_data[ts_iso] = [round(v, 1) for v in ts_data[ts_iso]]
 
             # Split by year and write JSON
             year_data = {}  # { year: [[ts_iso, v1, v2, ...], ...] }
