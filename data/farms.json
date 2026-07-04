@@ -112,6 +112,30 @@
           "fitch",
           "ghost"
         ]
+      },
+      "pywake": {
+        "years": [
+          2020,
+          2021,
+          2022,
+          2023,
+          2024,
+          2025
+        ],
+        "scenarios": [
+          "era5_standalone",
+          "era5_cluster"
+        ],
+        "models": [
+          "NOJ",
+          "Bastankhah",
+          "Niayifar",
+          "TurboNOJ",
+          "TurboGaussian",
+          "Blondel",
+          "GCL",
+          "ASO"
+        ]
       }
     },
     {
@@ -356,6 +380,30 @@
         "variants": [
           "fitch",
           "ghost"
+        ]
+      },
+      "pywake": {
+        "years": [
+          2020,
+          2021,
+          2022,
+          2023,
+          2024,
+          2025
+        ],
+        "scenarios": [
+          "era5_standalone",
+          "era5_cluster"
+        ],
+        "models": [
+          "NOJ",
+          "Bastankhah",
+          "Niayifar",
+          "TurboNOJ",
+          "TurboGaussian",
+          "Blondel",
+          "GCL",
+          "ASO"
         ]
       }
     },
@@ -624,6 +672,30 @@
           "fitch",
           "ghost"
         ]
+      },
+      "pywake": {
+        "years": [
+          2020,
+          2021,
+          2022,
+          2023,
+          2024,
+          2025
+        ],
+        "scenarios": [
+          "era5_standalone",
+          "era5_cluster"
+        ],
+        "models": [
+          "NOJ",
+          "Bastankhah",
+          "Niayifar",
+          "TurboNOJ",
+          "TurboGaussian",
+          "Blondel",
+          "GCL",
+          "ASO"
+        ]
       }
     },
     {
@@ -644,7 +716,31 @@
         2023,
         2024,
         2025
-      ]
+      ],
+      "pywake": {
+        "years": [
+          2020,
+          2021,
+          2022,
+          2023,
+          2024,
+          2025
+        ],
+        "scenarios": [
+          "era5_standalone",
+          "era5_cluster"
+        ],
+        "models": [
+          "NOJ",
+          "Bastankhah",
+          "Niayifar",
+          "TurboNOJ",
+          "TurboGaussian",
+          "Blondel",
+          "GCL",
+          "ASO"
+        ]
+      }
     },
     {
       "id": "Lincs",
@@ -674,6 +770,30 @@
         "variants": [
           "fitch",
           "ghost"
+        ]
+      },
+      "pywake": {
+        "years": [
+          2020,
+          2021,
+          2022,
+          2023,
+          2024,
+          2025
+        ],
+        "scenarios": [
+          "era5_standalone",
+          "era5_cluster"
+        ],
+        "models": [
+          "NOJ",
+          "Bastankhah",
+          "Niayifar",
+          "TurboNOJ",
+          "TurboGaussian",
+          "Blondel",
+          "GCL",
+          "ASO"
         ]
       }
     },
@@ -879,6 +999,30 @@
           "fitch",
           "ghost"
         ]
+      },
+      "pywake": {
+        "years": [
+          2020,
+          2021,
+          2022,
+          2023,
+          2024,
+          2025
+        ],
+        "scenarios": [
+          "era5_standalone",
+          "era5_cluster"
+        ],
+        "models": [
+          "NOJ",
+          "Bastankhah",
+          "Niayifar",
+          "TurboNOJ",
+          "TurboGaussian",
+          "Blondel",
+          "GCL",
+          "ASO"
+        ]
       }
     },
     {
@@ -938,6 +1082,30 @@
         "variants": [
           "fitch",
           "ghost"
+        ]
+      },
+      "pywake": {
+        "years": [
+          2020,
+          2021,
+          2022,
+          2023,
+          2024,
+          2025
+        ],
+        "scenarios": [
+          "era5_standalone",
+          "era5_cluster"
+        ],
+        "models": [
+          "NOJ",
+          "Bastankhah",
+          "Niayifar",
+          "TurboNOJ",
+          "TurboGaussian",
+          "Blondel",
+          "GCL",
+          "ASO"
         ]
       }
     },
@@ -1029,6 +1197,30 @@
         "variants": [
           "fitch",
           "ghost"
+        ]
+      },
+      "pywake": {
+        "years": [
+          2020,
+          2021,
+          2022,
+          2023,
+          2024,
+          2025
+        ],
+        "scenarios": [
+          "era5_standalone",
+          "era5_cluster"
+        ],
+        "models": [
+          "NOJ",
+          "Bastankhah",
+          "Niayifar",
+          "TurboNOJ",
+          "TurboGaussian",
+          "Blondel",
+          "GCL",
+          "ASO"
         ]
       }
     },
