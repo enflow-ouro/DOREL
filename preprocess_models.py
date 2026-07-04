@@ -22,6 +22,16 @@ PYWAKE_BASE    = DASHBOARD_DIR.parent / "benchmarks" / "results"
 ERA5_RESULTS   = DASHBOARD_DIR.parent / "benchmarks" / "era5" / "results"
 WRF_DIR        = Path(r"C:\Users\Usuario\Documents\POUNDS\density_power_csv")
 
+# ── Load Farm TEC Limits ──────────────────────────────────────────────
+FARM_TEC_MAP = {}
+if (DATA_DIR / "farms.json").exists():
+    with open(DATA_DIR / "farms.json", "r") as f:
+        _fj = json.load(f)
+        for _f in _fj.get("farms", []):
+            if "tec_mw" in _f and _f["tec_mw"] is not None:
+                FARM_TEC_MAP[_f["id"]] = float(_f["tec_mw"])
+
+
 # ── PyWake farm mapping  (results dir name → dashboard farm id) ──────
 PYWAKE_FARMS = {
     "Dudgeon":          "Dudgeon",
@@ -151,11 +161,15 @@ def process_pywake():
                 models = header[1:]
 
                 data = []
+                tec = FARM_TEC_MAP.get(farm_id)
                 for row in reader:
                     ts = row[0].strip()
                     # Convert space-separated datetime to ISO
                     ts_iso = ts.replace(" ", "T")
-                    values = [round(float(v), 1) for v in row[1:]]
+                    if tec:
+                        values = [min(round(float(v), 1), tec) for v in row[1:]]
+                    else:
+                        values = [round(float(v), 1) for v in row[1:]]
                     data.append([ts_iso] + values)
 
             out_dir = DATA_DIR / farm_id
@@ -278,6 +292,9 @@ def process_pywake_era5():
                         ts = row[0].strip()
                         ts_iso = ts.replace(" ", "T")
                         power_mw = round(float(row[power_col]), 1)
+                        tec = FARM_TEC_MAP.get(farm_id)
+                        if tec:
+                            power_mw = min(power_mw, tec)
 
                         if ts_iso not in ts_data:
                             ts_data[ts_iso] = [0.0] * len(found_models)
@@ -372,6 +389,9 @@ def process_wrf_set(month_files, variant_name):
                 for col_idx, fid in col_map.items():
                     try:
                         mw = round(float(row[col_idx].strip()), 1)
+                        tec = FARM_TEC_MAP.get(fid)
+                        if tec:
+                            mw = min(mw, tec)
                     except (ValueError, IndexError):
                         continue
                     if fid not in farm_data:
@@ -385,6 +405,10 @@ def process_wrf_set(month_files, variant_name):
                             float(row[walney_ext_cols[0]].strip()) +
                             float(row[walney_ext_cols[1]].strip()), 1
                         )
+                        tec = FARM_TEC_MAP.get("Walney_Extension")
+                        if tec:
+                            mw_sum = min(mw_sum, tec)
+                            
                         if "Walney_Extension" not in farm_data:
                             farm_data["Walney_Extension"] = []
                         farm_data["Walney_Extension"].append([ts_iso, mw_sum])
