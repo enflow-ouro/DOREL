@@ -989,7 +989,7 @@ class UIController {
     const modelSelect = document.getElementById('sel-pywake-model');
     const modelName = modelSelect ? modelSelect.value : '';
     const pwData = this._pywakeData;
-    console.log(`[DOREL] _buildModelData: showPyWake=${document.getElementById('toggle-pywake').checked}, modelIndex=${mi}, modelDropdownVal="${modelSelect?.value}", pywakeData=${pwData ? pwData.data?.length + ' rows' : 'null'}`);
+    console.log(`[DOREL] _buildModelData: showPyWake=${document.getElementById('toggle-pywake').checked}, modelDropdownVal="${modelSelect?.value}", pywakeData=${pwData ? pwData.data?.length + ' rows' : 'null'}`);
     const scenario = document.getElementById('sel-pywake-scenario');
     return {
       showPyWake:   document.getElementById('toggle-pywake').checked,

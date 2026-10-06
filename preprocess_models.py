@@ -211,6 +211,14 @@ ERA5_FARM_MAP = {
     "Walney_Extension": [("walney-extension-3", "walney-extension-3"),
                          ("walney-extension-4", "walney-extension-4")],
     "West_of_Duddon_Sands": [("west-of-duddon-sands", "west-of-duddon-sands")],
+    "Beatrice":         [("beatrice-offshore-wind-farm", "beatrice-offshore-wind-farm")],
+    "Galloper":         [("galloper",          "galloper")],
+    "Hywind_Scotland":  [("hywind-scotland-pilot-park", "hywind-scotland-pilot-park")],
+    "Kincardine":       [("kincardine",        "kincardine")],
+    "Lincs":            [("lincs",             "lincs")],
+    "Rampion":          [("rampion",           "rampion")],
+    "Seagreen":         [("seagreen-phase-1-windfarm", "seagreen-phase-1-windfarm")],
+    "Thanet":           [("thanet",            "thanet")],
 }
 
 # ERA5 scenarios: csv suffix → dashboard scenario name
