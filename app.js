@@ -302,7 +302,7 @@ class ChartManager {
 
     // PyWake
     if (md.showPyWake && md.pywake && md.pywake.data.length > 0) {
-      const mi = md.pywakeModelIndex || 0;
+      const mi = md.pywake.models.indexOf(md.pywakeModelName) > -1 ? md.pywake.models.indexOf(md.pywakeModelName) : 0;
       const modelName = md.pywake.models[mi] || 'PyWake';
       const filtered = md.pywake.data.filter(r => inRange(r[0]));
       traces.push({
@@ -483,7 +483,7 @@ class ChartManager {
     // Build list of active model sources
     const sources = [];
     if (md.showPyWake && md.pywake && md.pywake.data.length > 0) {
-      const mi = md.pywakeModelIndex || 0;
+      const mi = md.pywake.models.indexOf(md.pywakeModelName) > -1 ? md.pywake.models.indexOf(md.pywakeModelName) : 0;
       const isEra5 = md.pywakeScenario && md.pywakeScenario.startsWith('era5');
       sources.push({
         label: 'PyWake ' + (md.pywake.models[mi] || ''),
@@ -987,7 +987,7 @@ class UIController {
   /* ---- Build model data object for ChartManager ---- */
   _buildModelData() {
     const modelSelect = document.getElementById('sel-pywake-model');
-    const mi = modelSelect ? parseInt(modelSelect.value) || 0 : 0;
+    const modelName = modelSelect ? modelSelect.value : '';
     const pwData = this._pywakeData;
     console.log(`[DOREL] _buildModelData: showPyWake=${document.getElementById('toggle-pywake').checked}, modelIndex=${mi}, modelDropdownVal="${modelSelect?.value}", pywakeData=${pwData ? pwData.data?.length + ' rows' : 'null'}`);
     const scenario = document.getElementById('sel-pywake-scenario');
@@ -996,7 +996,7 @@ class UIController {
       showWrfFitch: document.getElementById('toggle-wrf-fitch').checked,
       showWrfGhost: document.getElementById('toggle-wrf-ghost').checked,
       pywake:       pwData,
-      pywakeModelIndex: mi,
+      pywakeModelName: modelName,
       pywakeScenario: scenario ? scenario.value : '',
       wrfFitch:     this._wrfFitchData,
       wrfGhost:     this._wrfGhostData,
@@ -1057,7 +1057,7 @@ class UIController {
       console.log(`[DOREL] Populating model dropdown: ${models.length} models:`, models);
       models.forEach((m, i) => {
         const opt = document.createElement('option');
-        opt.value = i;
+        opt.value = m;
         opt.textContent = m;
         // Default to ASO
         if (m === 'ASO') opt.selected = true;
@@ -1144,7 +1144,7 @@ class UIController {
 
     // PyWake
     if (md.showPyWake && md.pywake && md.pywake.data.length > 0) {
-      const mi = md.pywakeModelIndex || 0;
+      const mi = md.pywake.models.indexOf(md.pywakeModelName) > -1 ? md.pywake.models.indexOf(md.pywakeModelName) : 0;
       const filtered = md.pywake.data.filter(r => inRange(r[0]));
       // PyWake data is 10-min resolution; each value is MW => MWh = MW * (10/60)
       const pwMWh = filtered.reduce((s, r) => s + (r[1 + mi] || 0) * (10 / 60), 0);
