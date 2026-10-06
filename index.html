@@ -102,8 +102,14 @@
             <input id="toggle-pywake" type="checkbox"> PyWake
           </label>
           <select id="sel-pywake-scenario" class="model-select" title="PyWake scenario">
-            <option value="standalone">Standalone</option>
-            <option value="cluster">Cluster</option>
+            <option value="standalone">Standalone (Legacy)</option>
+            <option value="cluster">Cluster (Legacy)</option>
+            <option value="era5_standalone">ERA5 Standalone</option>
+            <option value="era5_cluster">ERA5 Cluster</option>
+            <option value="isolated">Isolated (v4)</option>
+            <option value="cluster_2023">Cluster 2023 (v4)</option>
+            <option value="cluster_2030">Cluster 2030 (v4)</option>
+            <option value="single_turbine">Single Turbine (v4)</option>
           </select>
           <select id="sel-pywake-model" class="model-select" title="Wake model">
             <!-- populated by JS -->
